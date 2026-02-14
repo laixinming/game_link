@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的链游 - 哈希链</title>
+    <title>我的链游 - 道具系统</title>
     <style>
         * {
             box-sizing: border-box;
@@ -41,20 +41,22 @@
         .btn-danger {
             background: #ff4444;
         }
+        .btn-success {
+            background: #00C851;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>链游 - 哈希链账本</h1>
-    <p>状态：第三步·不可篡改记录</p>
+    <h1>链游 - 道具归属系统</h1>
+    <p>状态：第四步·资产上链</p>
 
     <div>
         <button class="btn" onclick="createWallet()">生成钱包</button>
         <button class="btn" onclick="showMyMnemonic()">查看助记词</button>
-        <button class="btn" onclick="addTestRecord()">新增一条记录</button>
-        <button class="btn" onclick="showChain()">查看哈希链</button>
-        <button class="btn" onclick="verifyChain()">校验是否篡改</button>
-        <button class="btn btn-danger" onclick="fakeTamperTest()">模拟篡改测试</button>
+        <button class="btn-success" onclick="mintItem()">生成道具【新手剑】</button>
+        <button class="btn" onclick="showMyItems()">查看我的道具</button>
+        <button class="btn" onclick="verifyChain()">校验链是否篡改</button>
     </div>
 
     <h3>调试日志</h3>
@@ -106,24 +108,17 @@ async function sha256(str) {
 }
 
 // ====================== 哈希链核心 ======================
-// 初始化链
 function initChain() {
     if(!localStorage.getItem(STORAGE_CHAIN)) {
         localStorage.setItem(STORAGE_CHAIN, JSON.stringify([]));
     }
 }
-
-// 获取整条链
 function getChain() {
     return JSON.parse(localStorage.getItem(STORAGE_CHAIN) || '[]');
 }
-
-// 保存链
 function saveChain(chain) {
     localStorage.setItem(STORAGE_CHAIN, JSON.stringify(chain));
 }
-
-// 新增记录
 async function addRecord(data) {
     const chain = getChain();
     const prevHash = chain.length > 0 ? chain[chain.length-1].hash : 'genesis';
@@ -136,14 +131,11 @@ async function addRecord(data) {
         hash: ''
     };
 
-    // 计算本块哈希
     block.hash = await sha256(JSON.stringify(block));
     chain.push(block);
     saveChain(chain);
     return block;
 }
-
-// 校验整条链是否被篡改
 async function verifyChain() {
     const chain = getChain();
     if(chain.length === 0) return true;
@@ -151,8 +143,6 @@ async function verifyChain() {
     for(let i=1; i<chain.length; i++) {
         const cur = chain[i];
         const prev = chain[i-1];
-
-        // 重新计算哈希
         const temp = {...cur, hash: ''};
         const reHash = await sha256(JSON.stringify(temp));
 
@@ -161,47 +151,55 @@ async function verifyChain() {
             return false;
         }
     }
-    log("✅ 哈希链完整，未被篡改");
+    log("✅ 哈希链完整，资产安全");
     return true;
 }
 
-// ====================== 测试函数 ======================
-async function addTestRecord() {
-    const user = localStorage.getItem(STORAGE_MNEMONIC)?.substring(0,10) || 'guest';
+// ====================== 道具系统（核心） ======================
+// 生成道具，归属当前钱包
+async function mintItem() {
+    const mnemonic = localStorage.getItem(STORAGE_MNEMONIC);
+    if(!mnemonic) {
+        log("⚠️ 请先生成钱包");
+        return;
+    }
+
     const block = await addRecord({
-        user: user,
-        action: 'test_record',
-        note: '测试不可篡改记录'
+        type: "item",
+        owner: mnemonic, // 绑定所有者
+        itemName: "新手剑",
+        itemId: "item_"+Date.now() // 唯一道具ID
     });
-    log(`✅ 新增记录 #${block.index}，哈希前16位：${block.hash.substring(0,16)}...`);
+
+    log(`✅ 获得【新手剑】，记录 #${block.index}`);
 }
 
-function showChain() {
-    const chain = getChain();
-    if(chain.length === 0) {
-        log("ℹ️ 暂无记录");
+// 查看当前钱包的所有道具
+function showMyItems() {
+    const mnemonic = localStorage.getItem(STORAGE_MNEMONIC);
+    if(!mnemonic) {
+        log("⚠️ 请先生成钱包");
         return;
     }
-    const last = chain[chain.length-1];
-    log(`📦 共${chain.length}条记录，最新 #${last.index} 哈希：${last.hash.substring(0,16)}...`);
-}
 
-// 模拟篡改（故意破坏数据）
-function fakeTamperTest() {
     const chain = getChain();
-    if(chain.length < 2) {
-        log("⚠️ 至少2条记录才能测试篡改");
+    const myItems = chain.filter(b => b.data.type === "item" && b.data.owner === mnemonic);
+
+    if(myItems.length === 0) {
+        log("🎒 背包为空，快去生成道具");
         return;
     }
-    chain[1].data.note = "我被篡改了！";
-    saveChain(chain);
-    log("⚠️ 已模拟修改第1块数据，请点【校验是否篡改】");
+
+    log(`🎒 共拥有 ${myItems.length} 个道具：`);
+    myItems.forEach(item => {
+        log(`- ${item.data.itemName} (ID:${item.data.itemId.slice(-6)})`);
+    });
 }
 
 // 初始化
 window.onload = () => {
     initChain();
-    log("游戏基座+哈希链加载完成 ✅");
+    log("游戏基座+道具系统加载完成 ✅");
 };
 </script>
 </body>
