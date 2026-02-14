@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的链游 - 最简基座</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui;
+        }
+        body {
+            background: #0b0f1a;
+            color: #fff;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .log {
+            background: #121a29;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            min-height: 100px;
+            font-size: 14px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+        }
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            background: #4a7dff;
+            color: #fff;
+            cursor: pointer;
+            margin: 6px 0;
+        }
+        .btn:hover {
+            background: #366aff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>链游最简基座</h1>
+        <p>状态：第一步基座运行中</p>
+
+        <button class="btn" onclick="testLog()">测试打印日志</button>
+        <button class="btn" onclick="checkLocalStorage()">测试本地存储</button>
+
+        <h3>调试日志</h3>
+        <div id="log" class="log">等待操作...</div>
+    </div>
+
+    <script>
+        const logDom = document.getElementById('log');
+
+        // 日志输出
+        function log(text) {
+            logDom.innerText = `[${new Date().toLocaleString()}] ${text}\n` + logDom.innerText;
+        }
+
+        // 测试日志
+        function testLog() {
+            log('基座正常运行 → 第一步成功');
+        }
+
+        // 测试本地存储（后面钱包、道具会用）
+        function checkLocalStorage() {
+            try {
+                localStorage.setItem('test', 'hello_game');
+                const val = localStorage.getItem('test');
+                log(`本地存储正常：${val}`);
+            } catch (e) {
+                log('本地存储异常：' + e);
+            }
+        }
+
+        // 初始化
+        window.onload = () => {
+            log('游戏基座加载完成 ✅');
+        };
+    </script>
+</body>
+</html>
