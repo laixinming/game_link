@@ -19,12 +19,16 @@
 <div class="container">
   <h1>工程化解耦·游戏框架</h1>
   <p>底层：core.js｜玩法：game.js｜页面：index.html</p>
-
+ 
+  <button class="btn-success" onclick="Game.givePlayerSword()">领新手剑</button>
+  <button class="btn" onclick="Game.showMyLatestItems()">最新背包</button>
+  <button class="btn" onclick="Game.enhanceItem(1)">强化+1</button>
+  <button class="btn" onclick="Game.insertGem('红宝石','攻击+10')">镶嵌红宝石</button>
+  <button class="btn" onclick="Game.consumeItem()">消耗装备</button>
   <button class="btn" onclick="Core.unlockWallet()">解锁钱包</button>
   <button class="btn" onclick="Core.createWallet()">生成钱包</button>
   <button class="btn" onclick="Core.showMnemonic()">查看助记词</button>
-  <button class="btn-success" onclick="Game.givePlayerSword()">新手剑</button>
-  <button class="btn" onclick="Game.showMyBag()">背包</button>
+  
   <button class="btn btn-warning" onclick="Core.verifyChainBtn()">校验数据</button>
 
   <input id="input_mne" placeholder="助记词恢复账号">
