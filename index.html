@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>跨设备恢复修复版</title>
+    <title>我的链游 - IPFS 公共链</title>
     <style>
         * {box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
         body {background:#0b0f1a;color:#fff;padding:20px}
@@ -17,16 +17,18 @@
 </head>
 <body>
 <div class="container">
-    <h1>链游 - 跨设备恢复</h1>
-    <p>状态：第五步·数据同步演示</p>
+    <h1>链游 - IPFS 公共链</h1>
+    <p>状态：第六步·全网资产同步</p>
 
     <button class="btn" onclick="createWallet()">生成钱包</button>
     <button class="btn" onclick="showMyMnemonic()">查看助记词</button>
     <button class="btn-success" onclick="mintItem()">生成新手剑</button>
     <button class="btn" onclick="showMyItems()">查看我的道具</button>
-
-    <button class="btn btn-warning" onclick="exportChain()">导出链数据</button>
-    <button class="btn btn-warning" onclick="importChain()">导入链数据</button>
+    
+    <button class="btn btn-warning" onclick="uploadChainToIPFS()">上传链到 IPFS</button>
+    
+    <input id="inputCID" placeholder="输入IPFS CID 拉取全链">
+    <button class="btn" onclick="pullChainFromIPFS()">拉取 IPFS 链</button>
 
     <input id="inputMnemonic" placeholder="粘贴助记词恢复账号">
     <button class="btn" onclick="restoreWalletAndAssets()">恢复账号&资产</button>
@@ -53,17 +55,17 @@ function createWallet() {
 }
 function showMyMnemonic() {
     const mne = localStorage.getItem(STORAGE_MNEMONIC);
-    mne ? log("📄 "+mne) : log("⚠️ 未创建钱包");
+    mne ? log("📄 助记词："+mne) : log("⚠️ 未创建钱包");
 }
 
-// ====================== 哈希 ======================
+// ====================== SHA256 哈希 ======================
 async function sha256(s) {
     const enc = new TextEncoder();
     const d = await crypto.subtle.digest('SHA-256', enc.encode(s));
     return Array.from(new Uint8Array(d)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-// ====================== 链 ======================
+// ====================== 本地哈希链 ======================
 function initChain() { if(!localStorage.getItem(STORAGE_CHAIN)) localStorage.setItem(STORAGE_CHAIN,'[]') }
 function getChain() { return JSON.parse(localStorage.getItem(STORAGE_CHAIN)||'[]') }
 function saveChain(c) { localStorage.setItem(STORAGE_CHAIN, JSON.stringify(c)) }
@@ -78,48 +80,70 @@ async function addRecord(data) {
     return block;
 }
 
-// ====================== 道具 ======================
+// ====================== 道具系统 ======================
 async function mintItem() {
     const mne = localStorage.getItem(STORAGE_MNEMONIC);
     if(!mne) return log("⚠️ 先创建钱包");
     const b = await addRecord({type:"item", owner:mne, itemName:"新手剑", id:Date.now()});
-    log(`✅ 获得新手剑 #${b.index}`);
+    log(`✅ 获得【新手剑】 记录#${b.index}`);
 }
 
 function showMyItems() {
     const mne = localStorage.getItem(STORAGE_MNEMONIC);
     if(!mne) return log("⚠️ 先创建钱包");
     const items = getChain().filter(i=>i.data.type==="item" && i.data.owner===mne);
-    items.length ? log(`🎒 道具数量：${items.length}`) : log("🎒 背包空");
+    items.length ? log(`🎒 共拥有 ${items.length} 个道具`) : log("🎒 背包空");
 }
 
-// ====================== 恢复 ======================
+// ====================== 账号恢复 ======================
 function restoreWalletAndAssets() {
     const val = document.getElementById('inputMnemonic').value.trim();
-    if(val.split(/\s+/).length!==12) return log("❌ 格式错误");
+    if(val.split(/\s+/).length!==12) return log("❌ 请输入12个单词助记词");
     localStorage.setItem(STORAGE_MNEMONIC, val);
-    log("✅ 账号已恢复");
+    log("✅ 账号恢复成功");
     showMyItems();
 }
 
-// ====================== 导出/导入链（解决你现在的问题） ======================
-function exportChain() {
+// ====================== IPFS 上传/拉取（核心） ======================
+// 上传链到 IPFS
+async function uploadChainToIPFS() {
     const chain = getChain();
-    const str = JSON.stringify(chain);
-    navigator.clipboard.writeText(str);
-    log("📤 链数据已复制，去新浏览器粘贴导入");
-}
+    if(chain.length === 0) return log("⚠️ 链为空");
 
-function importChain() {
-    const str = prompt("粘贴链数据：");
     try {
-        const chain = JSON.parse(str);
-        saveChain(chain);
-        log("📥 链数据导入成功！");
-        showMyItems();
-    } catch(e) { log("❌ 格式错误"); }
+        const formData = new FormData();
+        formData.append('file', new Blob([JSON.stringify(chain)], {type:'application/json'}));
+
+        const res = await fetch('https://ipfs.io/api/v0/add?pin=true', {
+            method: 'POST',
+            body: formData
+        });
+        const json = await res.json();
+        const cid = json.Hash;
+        log("📡 上传成功！IPFS CID："+cid);
+        document.getElementById('inputCID').value = cid;
+    } catch(e) {
+        log("❌ 上传失败：网络或IPFS限制");
+    }
 }
 
+// 从 IPFS 拉取全链
+async function pullChainFromIPFS() {
+    const cid = document.getElementById('inputCID').value.trim();
+    if(!cid) return log("⚠️ 请输入CID");
+
+    try {
+        const res = await fetch(`https://ipfs.io/ipfs/${cid}`);
+        const chain = await res.json();
+        saveChain(chain);
+        log("📥 拉取成功！已同步全链数据");
+        showMyItems();
+    } catch(e) {
+        log("❌ 拉取失败：CID无效或网络异常");
+    }
+}
+
+// ====================== 初始化 ======================
 window.onload = initChain;
 </script>
 </body>
