@@ -4,47 +4,41 @@ import os
 
 app = Flask(__name__)
 
-# 私链存储文件（Vercel 可正常读写）
-CHAIN_FILE = "/tmp/chain.json"
+# Vercel 唯一可写目录
+CHAIN_PATH = "/tmp/chain.json"
 
-# 初始化链
-def init_chain():
-    if not os.path.exists(CHAIN_FILE):
-        with open(CHAIN_FILE, "w", encoding="utf-8") as f:
-            json.dump({}, f)
+# 安全初始化链
+def safe_load_chain():
+    if not os.path.exists(CHAIN_PATH):
+        default = {}
+        with open(CHAIN_PATH, "w", encoding="utf-8") as f:
+            json.dump(default, f)
+        return default
 
-# 快照：只保留【玩家最终道具】，链永远极小
-def make_snapshot(state):
-    snapshot = {}
-    for addr, items in state.items():
-        snapshot[addr] = list(items)
-    return snapshot
+    try:
+        with open(CHAIN_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
 
-# 读取全服私链
+# 保存
+def safe_save(data):
+    with open(CHAIN_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+# 拉取全服状态
 @app.route("/get-chain", methods=["GET"])
 def get_chain():
-    init_chain()
-    try:
-        with open(CHAIN_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return jsonify(data), 200
-    except:
-        return jsonify({}), 200
+    data = safe_load_chain()
+    return jsonify(data), 200
 
-# 更新全服私链（打怪、交易都会走这里）
+# 更新全服状态（打怪、交易）
 @app.route("/update-chain", methods=["POST"])
 def update_chain():
-    init_chain()
-    data = request.get_json()
-    new_state = data.get("state", {})
-
-    # 自动快照压缩
-    snap = make_snapshot(new_state)
-
-    with open(CHAIN_FILE, "w", encoding="utf-8") as f:
-        json.dump(snap, f)
-
-    return jsonify({"ok": True}), 200
-
-if __name__ == "__main__":
-    app.run(debug=True)
+    try:
+        body = request.get_json()
+        state = body.get("state", {})
+        safe_save(state)
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
