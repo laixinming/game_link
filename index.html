@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的链游 - 最简基座</title>
+    <title>我的链游 - 钱包身份</title>
     <style>
         * {
             box-sizing: border-box;
@@ -42,47 +42,91 @@
         .btn:hover {
             background: #366aff;
         }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border: none;
+            background: #1e2530;
+            color: #fff;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>链游最简基座</h1>
-        <p>状态：第一步基座运行中</p>
+        <h1>链游 - 本地钱包</h1>
+        <p>状态：第二步·身份系统</p>
 
-        <button class="btn" onclick="testLog()">测试打印日志</button>
-        <button class="btn" onclick="checkLocalStorage()">测试本地存储</button>
+        <button class="btn" onclick="createWallet()">生成新钱包</button>
+        <button class="btn" onclick="showMyMnemonic()">查看我的助记词</button>
+        
+        <input type="text" id="inputMnemonic" placeholder="粘贴助记词恢复账号">
+        <button class="btn" onclick="restoreWallet()">恢复钱包</button>
 
         <h3>调试日志</h3>
         <div id="log" class="log">等待操作...</div>
     </div>
 
+    <!-- 助记词库 -->
+    <script src="https://cdn.jsdelivr.net/npm/bip39@3.1.0/dist/bip39.min.js"></script>
     <script>
         const logDom = document.getElementById('log');
+        const STORAGE_KEY = 'game_mnemonic';
 
         // 日志输出
         function log(text) {
             logDom.innerText = `[${new Date().toLocaleString()}] ${text}\n` + logDom.innerText;
         }
 
-        // 测试日志
-        function testLog() {
-            log('基座正常运行 → 第一步成功');
-        }
-
-        // 测试本地存储（后面钱包、道具会用）
-        function checkLocalStorage() {
+        // 1. 生成新钱包
+        function createWallet() {
             try {
-                localStorage.setItem('test', 'hello_game');
-                const val = localStorage.getItem('test');
-                log(`本地存储正常：${val}`);
+                const mnemonic = bip39.generateMnemonic();
+                localStorage.setItem(STORAGE_KEY, mnemonic);
+                log("✅ 新钱包已生成");
+                log("助记词：" + mnemonic);
             } catch (e) {
-                log('本地存储异常：' + e);
+                log("❌ 生成失败：" + e);
             }
         }
 
-        // 初始化
+        // 2. 查看当前助记词
+        function showMyMnemonic() {
+            const mnemonic = localStorage.getItem(STORAGE_KEY);
+            if (!mnemonic) {
+                log("⚠️ 还没有钱包，请先生成");
+                return;
+            }
+            log("📄 当前助记词：" + mnemonic);
+        }
+
+        // 3. 助记词恢复钱包
+        function restoreWallet() {
+            const input = document.getElementById('inputMnemonic').value.trim();
+            if (!input) {
+                log("⚠️ 请输入助记词");
+                return;
+            }
+            try {
+                const valid = bip39.validateMnemonic(input);
+                if (!valid) {
+                    log("❌ 助记词格式错误");
+                    return;
+                }
+                localStorage.setItem(STORAGE_KEY, input);
+                log("✅ 钱包恢复成功");
+                log("当前助记词：" + input);
+            } catch (e) {
+                log("❌ 恢复失败：" + e);
+            }
+        }
+
+        // 初始化：检查是否已有钱包
         window.onload = () => {
-            log('游戏基座加载完成 ✅');
+            log("游戏基座加载完成");
+            const hasWallet = !!localStorage.getItem(STORAGE_KEY);
+            log(hasWallet ? "✅ 已存在钱包" : "⚠️ 未创建钱包，请生成");
         };
     </script>
 </body>
