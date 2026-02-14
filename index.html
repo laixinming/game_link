@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>零服务器私链·道具交易版</title>
+<title>零服务器私链·交易+账号恢复版</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
 body{background:#0a0f1e;color:#e6e9f0;padding:15px}
@@ -23,11 +23,16 @@ input{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;backgro
 </head>
 <body>
 <div class="game">
-  <div class="head">零服务器私链·道具交易</div>
+  <div class="head">零服务器私链·交易+账号恢复</div>
   <div class="panel">
     <button class="btn" onclick="createWallet()">🪙 创建钱包</button>
+    <button class="btn" onclick="showMnemonic()">📄 查看助记词</button>
     <button class="btn" onclick="refreshChain()">🔄 刷新全服链</button>
+    
+    <input id="restoreMne" placeholder="输入12个单词助记词恢复账号">
+    <button class="btn-danger" onclick="restoreAccount()">✅ 恢复账号</button>
     <div class="hr"></div>
+    
     <button class="btn-success" onclick="fight()">⚔️ 打怪爆装备</button>
     <div class="hr"></div>
 
@@ -46,37 +51,69 @@ input{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;backgro
 <script>
 const logBox = document.getElementById('log')
 const bagBox = document.getElementById('bag')
-const USER_ADDR = 'my_addr'
+const KEY_MNEMONIC = 'game_mnemonic'
+const KEY_ADDR = 'game_addr'
 
-// 你部署后改成自己 Vercel 的 chain.json 地址
+// 部署后改成你自己 Vercel 的 chain.json
 const CHAIN_URL = 'https://your-domain.vercel.app/chain.json?t=' + Date.now()
+
+// 助记词库
+const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(" ")
 
 function print(text) {
   logBox.innerText = `[${new Date().toLocaleTimeString()}] ${text}\n` + logBox.innerText
 }
 
-// 钱包
+// ====================== 钱包 + 账号恢复（核心） ======================
+// 创建钱包：助记词 + 地址
 function createWallet() {
-  const addr = Array(16).fill(0)
-    .map(() => Math.random().toString(36)[2]).join('')
-  localStorage.setItem(USER_ADDR, addr)
-  print('✅ 你的地址：' + addr)
+  // 生成12个单词助记词
+  const mne = Array(12).fill(0).map(()=>words[Math.random()*words.length|0]).join(" ")
+  // 用助记词哈希生成唯一地址
+  sha256(mne).then(hash=>{
+    const addr = hash.slice(0,16) // 取前16位当地址
+    localStorage.setItem(KEY_MNEMONIC, mne)
+    localStorage.setItem(KEY_ADDR, addr)
+    print("✅ 钱包创建成功")
+    print("📌 你的地址："+addr)
+    refreshChain()
+  })
+}
+
+// 查看助记词
+function showMnemonic() {
+  const mne = localStorage.getItem(KEY_MNEMONIC)
+  mne ? print("📋 助记词："+mne) : print("⚠️ 未创建钱包")
+}
+
+// 恢复账号：助记词 → 还原地址
+async function restoreAccount() {
+  const inputMne = document.getElementById("restoreMne").value.trim()
+  if(inputMne.split(/\s+/).length !== 12) {
+    return print("❌ 请输入12个单词助记词")
+  }
+  const hash = await sha256(inputMne)
+  const addr = hash.slice(0,16)
+  localStorage.setItem(KEY_MNEMONIC, inputMne)
+  localStorage.setItem(KEY_ADDR, addr)
+  print("✅ 账号恢复成功！")
+  print("📌 恢复地址："+addr)
   refreshChain()
 }
 
+// 获取当前地址
 function getMyAddr() {
-  return localStorage.getItem(USER_ADDR)
+  return localStorage.getItem(KEY_ADDR)
 }
 
-// SHA256 防篡改
+// ====================== SHA256 防篡改 ======================
 async function sha256(str) {
   const msg = new TextEncoder().encode(str)
   const hash = await crypto.subtle.digest('SHA-256', msg)
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0')).join('')
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('')
 }
 
-// 校验整条链是否被篡改
+// 校验整条链
 async function verifyChain(chain) {
   if (!chain || chain.length === 0) return true
   for (let i = 1; i < chain.length; i++) {
@@ -84,14 +121,12 @@ async function verifyChain(chain) {
     const pre = chain[i - 1]
     const temp = { ...cur, hash: '' }
     const calcHash = await sha256(JSON.stringify(temp))
-    if (cur.hash !== calcHash || cur.prevHash !== pre.hash) {
-      return false
-    }
+    if (cur.hash !== calcHash || cur.prevHash !== pre.hash) return false
   }
   return true
 }
 
-// 拉取全服唯一私链
+// 拉取全服链
 async function refreshChain() {
   try {
     const res = await fetch(CHAIN_URL)
@@ -118,7 +153,7 @@ async function refreshChain() {
   }
 }
 
-// 新增区块（唯一合法上链方式）
+// 合法上链
 async function addBlock(data) {
   const chain = await refreshChain()
   if (!chain) return null
@@ -151,7 +186,7 @@ async function fight() {
   print(`🎁 获得：${item}`)
 }
 
-// 显示背包（只认链，不认本地）
+// 背包
 function showBag() {
   const me = getMyAddr()
   if (!me || !window.GLOBAL_CHAIN) return
@@ -167,7 +202,7 @@ function showBag() {
   })
 }
 
-// ====================== 核心：道具交易（发送） ======================
+// ====================== 道具交易 ======================
 async function sendItem() {
   const me = getMyAddr()
   const to = document.getElementById('toAddr').value.trim()
@@ -175,29 +210,16 @@ async function sendItem() {
   if (!me || !to || !name) return print('⚠️ 信息不全')
   if (me === to) return print('⚠️ 不能发给自己')
 
-  // 防作弊：检查是否真的拥有该道具
   const chain = window.GLOBAL_CHAIN
   const has = chain.some(b =>
-    b.data.type === 'item' &&
-    b.data.owner === me &&
-    b.data.name === name
+    b.data.type === 'item' && b.data.owner === me && b.data.name === name
   )
-  if (!has) return print('❌ 你没有这个道具，无法发送')
+  if (!has) return print('❌ 你没有这个道具')
 
-  // 1. 销毁原道具
-  await addBlock({
-    type: 'trade_remove',
-    from: me,
-    item: name
-  })
-  // 2. 给对方新增道具
-  await addBlock({
-    type: 'trade_add',
-    to: to,
-    item: name
-  })
+  await addBlock({ type: 'trade_remove', from: me, item: name })
+  await addBlock({ type: 'trade_add', to: to, item: name })
 
-  print(`✅ 成功发送【${name}】给对方`)
+  print(`✅ 发送【${name}】成功`)
   refreshChain()
 }
 
