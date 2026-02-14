@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html charset="UTF-8">
+<html lang="UTF-8">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>带快照·私链永不膨胀·跨设备不丢装备</title>
+<title>刷新不丢·快照私链·最终版</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
 body{background:#0a0f1e;color:#e6e9f0;padding:15px}
@@ -20,7 +20,7 @@ input{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;backgro
 </head>
 <body>
 <div class="game">
-  <div class="head">私链带快照·永不变大·装备不丢</div>
+  <div class="head">刷新不丢·快照私链</div>
   <div class="panel">
     <button class="btn" onclick="createWallet()">🪙 创建钱包</button>
     <button class="btn" onclick="showMnemonic()">📄 助记词</button>
@@ -43,107 +43,120 @@ input{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;backgro
 <script>
 const logBox = document.getElementById('log');
 const bagBox = document.getElementById('bag');
-const KEY_MNE = 'mne';
-const KEY_ADDR = 'addr';
+const KEY_MNE = 'game_mne';
+const KEY_ADDR = 'game_addr';
+// 快照存在本地，永久保存，刷新不丢
+const SNAPSHOT_KEY = 'game_snapshot';
 
 const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(' ');
-
-// ============== 全局唯一状态 + 快照（链永远不大） ==============
-let state = {}; // 只存当前归属：{ 地址: [道具列表] }
 
 function print(text) {
   logBox.innerText = `[${new Date().toLocaleTimeString()}] ${text}\n` + logBox.innerText;
 }
 
-// ============== 账号系统 ==============
+// ============== 1. 账号系统 ==============
 function createWallet() {
   const mne = Array(12).fill(0).map(()=>words[Math.random()*words.length|0]).join(' ');
-  const addr = mne.replace(/\s/g, '').slice(-16);
+  const addr = mne.replace(/\s+/g, '').slice(-16);
   localStorage.setItem(KEY_MNE, mne);
   localStorage.setItem(KEY_ADDR, addr);
-  state[addr] = state[addr] || [];
-  print('✅ 钱包创建');
-  print('📍 地址：'+addr);
+  print('✅ 钱包已创建');
+  print('📍 地址：' + addr);
+  loadSnapshot();
   showBag();
 }
 
 function showMnemonic() {
   const mne = localStorage.getItem(KEY_MNE);
-  mne ? print('📋 助记词：'+mne) : print('❌ 未创建钱包');
+  mne ? print('📋 助记词：' + mne) : print('❌ 先创建钱包');
 }
 
 function restoreAccount() {
   const input = document.getElementById('mneInput').value.trim();
-  if(input.split(/\s+/).length!==12) return print('❌ 需12个单词');
-  const addr = input.replace(/\s/g, '').slice(-16);
+  if (input.split(/\s+/).length !== 12) return print('❌ 请输入12个单词');
+  const addr = input.replace(/\s+/g, '').slice(-16);
   localStorage.setItem(KEY_MNE, input);
   localStorage.setItem(KEY_ADDR, addr);
-  state[addr] = state[addr] || [];
   print('✅ 账号恢复成功！');
-  print('📍 地址：'+addr);
+  print('📍 地址：' + addr);
+  loadSnapshot();
   showBag();
 }
 
-function getMe() {
+function getMyAddr() {
   return localStorage.getItem(KEY_ADDR);
 }
 
-// ============== 核心：快照结构，只存当前状态，永不膨胀 ==============
-function initState() {
-  if(!window.globalState) window.globalState = {};
-  state = window.globalState;
+// ============== 2. 快照核心（永不膨胀、刷新不丢） ==============
+let state = {};
+
+// 加载快照
+function loadSnapshot() {
+  try {
+    state = JSON.parse(localStorage.getItem(SNAPSHOT_KEY)) || {};
+  } catch (e) {
+    state = {};
+  }
 }
 
-// ============== 打怪 ==============
+// 保存快照
+function saveSnapshot() {
+  localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(state));
+}
+
+// ============== 3. 打怪 ==============
 function fight() {
-  const me = getMe();
-  if(!me) return print('❌ 先创建钱包');
-  initState();
-  const items = ['铁剑','布衣','戒指','靴子','药水'];
-  const name = items[Math.random()*5|0];
+  const me = getMyAddr();
+  if (!me) return print('❌ 先创建钱包');
+  loadSnapshot();
+  const items = ['铁剑', '布衣', '戒指', '靴子', '药水'];
+  const name = items[Math.random() * 5 | 0];
   state[me] = state[me] || [];
   state[me].push(name);
-  print('🎁 获得：'+name);
+  saveSnapshot();
+  print('🎁 获得：' + name);
   showBag();
 }
 
-// ============== 背包（从状态读取，永远最新） ==============
+// ============== 4. 背包（刷新永远不丢） ==============
 function showBag() {
-  const me = getMe();
+  const me = getMyAddr();
   bagBox.innerHTML = '';
-  if(!me) return;
-  initState();
+  if (!me) return;
+  loadSnapshot();
   const myItems = state[me] || [];
-  myItems.forEach(name=>{
+  myItems.forEach(name => {
     const d = document.createElement('div');
-    d.className='item';
-    d.innerText=name;
+    d.className = 'item';
+    d.innerText = name;
     bagBox.appendChild(d);
   });
 }
 
-// ============== 发送道具 ==============
+// ============== 5. 发送道具 ==============
 function sendItem() {
-  const me = getMe();
+  const me = getMyAddr();
   const to = document.getElementById('toAddr').value.trim();
   const name = document.getElementById('itemName').value.trim();
-  if(!me || !to || !name) return print('❌ 信息不全');
+  if (!me || !to || !name) return print('❌ 信息不全');
 
-  initState();
-  if(!state[me] || !state[me].includes(name)) return print('❌ 无此道具');
+  loadSnapshot();
+  if (!state[me] || !state[me].includes(name)) return print('❌ 你没有该道具');
 
-  // 移除我的
-  state[me].splice(state[me].indexOf(name),1);
-  // 加入对方
+  // 移除我的道具
+  state[me].splice(state[me].indexOf(name), 1);
+  // 发给对方
   state[to] = state[to] || [];
   state[to].push(name);
   
-  print('✅ 发送成功：'+name);
+  saveSnapshot();
+  print('✅ 发送成功：' + name);
   showBag();
 }
 
-// 初始化
-initState();
+// 初始化：一进来就加载快照，保证刷新不丢
+loadSnapshot();
+showBag();
 </script>
 </body>
 </html>
