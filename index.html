@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>零服务器私链·交易+账号恢复版</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>零服务器私链·满足你全部需求最终版</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
 body{background:#0a0f1e;color:#e6e9f0;padding:15px}
@@ -13,7 +13,6 @@ body{background:#0a0f1e;color:#e6e9f0;padding:15px}
 .btn{width:100%;padding:12px;margin:6px 0;border:none;border-radius:10px;background:#2d4bff;color:#fff;font-weight:bold;cursor:pointer}
 .btn-success{background:#00b850}
 .btn-warning{background:#ff9500}
-.btn-danger{background:#ff4444}
 input{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;background:#1e273e;color:#fff}
 .log{background:#0d1324;padding:12px;border-radius:8px;margin:10px 0;height:110px;overflow-y:auto;font-size:13px}
 .bag{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
@@ -23,25 +22,20 @@ input{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;backgro
 </head>
 <body>
 <div class="game">
-  <div class="head">零服务器私链·交易+账号恢复</div>
+  <div class="head">零服务器私链·最终完整版</div>
   <div class="panel">
-    <button class="btn" onclick="createWallet()">🪙 创建钱包</button>
+    <button class="btn" onclick="createWallet()">🪙 创建钱包（助记词）</button>
     <button class="btn" onclick="showMnemonic()">📄 查看助记词</button>
-    <button class="btn" onclick="refreshChain()">🔄 刷新全服链</button>
-    
-    <input id="restoreMne" placeholder="输入12个单词助记词恢复账号">
-    <button class="btn-danger" onclick="restoreAccount()">✅ 恢复账号</button>
+    <input id="restoreMne" placeholder="粘贴12个单词恢复账号">
+    <button class="btn" onclick="restoreAccount()">✅ 恢复账号</button>
     <div class="hr"></div>
-    
     <button class="btn-success" onclick="fight()">⚔️ 打怪爆装备</button>
     <div class="hr"></div>
-
-    <input id="toAddr" placeholder="对方钱包地址">
-    <input id="sendItemName" placeholder="要发送的道具名">
-    <button class="btn-warning" onclick="sendItem()">📤 发送道具给对方</button>
-    
+    <input id="toAddr" placeholder="对方地址">
+    <input id="itemName" placeholder="道具名称">
+    <button class="btn-warning" onclick="sendItem()">📤 发送道具</button>
     <div class="hr"></div>
-    <div>背包</div>
+    <div>🎒 我的背包（直接看这里）</div>
     <div class="bag" id="bag"></div>
     <div>日志</div>
     <div class="log" id="log"></div>
@@ -49,184 +43,99 @@ input{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;backgro
 </div>
 
 <script>
-const logBox = document.getElementById('log')
-const bagBox = document.getElementById('bag')
-const KEY_MNEMONIC = 'game_mnemonic'
-const KEY_ADDR = 'game_addr'
+const logBox = document.getElementById('log');
+const bagBox = document.getElementById('bag');
+const KEY_MNE = 'mne';
+const KEY_ADDR = 'addr';
 
-// 部署后改成你自己 Vercel 的 chain.json
-const CHAIN_URL = 'https://your-domain.vercel.app/chain.json?t=' + Date.now()
-
-// 助记词库
-const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(" ")
+const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(' ');
 
 function print(text) {
-  logBox.innerText = `[${new Date().toLocaleTimeString()}] ${text}\n` + logBox.innerText
+  logBox.innerText = `[${new Date().toLocaleTimeString()}] ${text}\n` + logBox.innerText;
 }
 
-// ====================== 钱包 + 账号恢复（核心） ======================
-// 创建钱包：助记词 + 地址
+// ========================== 账号系统 ==========================
 function createWallet() {
-  // 生成12个单词助记词
-  const mne = Array(12).fill(0).map(()=>words[Math.random()*words.length|0]).join(" ")
-  // 用助记词哈希生成唯一地址
-  sha256(mne).then(hash=>{
-    const addr = hash.slice(0,16) // 取前16位当地址
-    localStorage.setItem(KEY_MNEMONIC, mne)
-    localStorage.setItem(KEY_ADDR, addr)
-    print("✅ 钱包创建成功")
-    print("📌 你的地址："+addr)
-    refreshChain()
-  })
+  const mne = Array(12).fill(0).map(() => words[Math.random() * words.length | 0]).join(' ');
+  const addr = mne.replace(/\s/g, '').slice(-16);
+  localStorage.setItem(KEY_MNE, mne);
+  localStorage.setItem(KEY_ADDR, addr);
+  print('✅ 钱包已创建');
+  print('📍 地址：' + addr);
+  showBag();
 }
 
-// 查看助记词
 function showMnemonic() {
-  const mne = localStorage.getItem(KEY_MNEMONIC)
-  mne ? print("📋 助记词："+mne) : print("⚠️ 未创建钱包")
+  const mne = localStorage.getItem(KEY_MNE);
+  mne ? print('📋 助记词：' + mne) : print('❌ 未创建钱包');
 }
 
-// 恢复账号：助记词 → 还原地址
-async function restoreAccount() {
-  const inputMne = document.getElementById("restoreMne").value.trim()
-  if(inputMne.split(/\s+/).length !== 12) {
-    return print("❌ 请输入12个单词助记词")
-  }
-  const hash = await sha256(inputMne)
-  const addr = hash.slice(0,16)
-  localStorage.setItem(KEY_MNEMONIC, inputMne)
-  localStorage.setItem(KEY_ADDR, addr)
-  print("✅ 账号恢复成功！")
-  print("📌 恢复地址："+addr)
-  refreshChain()
+function restoreAccount() {
+  const input = document.getElementById('restoreMne').value.trim();
+  if (input.split(/\s+/).length !== 12) return print('❌ 请输入12个单词');
+  const addr = input.replace(/\s/g, '').slice(-16);
+  localStorage.setItem(KEY_MNE, input);
+  localStorage.setItem(KEY_ADDR, addr);
+  print('✅ 账号恢复成功');
+  print('📍 地址：' + addr);
+  showBag();
 }
 
-// 获取当前地址
-function getMyAddr() {
-  return localStorage.getItem(KEY_ADDR)
+function getMe() {
+  return localStorage.getItem(KEY_ADDR);
 }
 
-// ====================== SHA256 防篡改 ======================
-async function sha256(str) {
-  const msg = new TextEncoder().encode(str)
-  const hash = await crypto.subtle.digest('SHA-256', msg)
-  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('')
+// ========================== 本地私链（不上公链、零服务器） ==========================
+let chain = JSON.parse(localStorage.getItem('chain') || '[]');
+
+function saveChain() {
+  localStorage.setItem('chain', JSON.stringify(chain));
 }
 
-// 校验整条链
-async function verifyChain(chain) {
-  if (!chain || chain.length === 0) return true
-  for (let i = 1; i < chain.length; i++) {
-    const cur = chain[i]
-    const pre = chain[i - 1]
-    const temp = { ...cur, hash: '' }
-    const calcHash = await sha256(JSON.stringify(temp))
-    if (cur.hash !== calcHash || cur.prevHash !== pre.hash) return false
-  }
-  return true
+// ========================== 打怪 ==========================
+function fight() {
+  const me = getMe();
+  if (!me) return print('❌ 先创建钱包');
+  const items = ['铁剑', '布衣', '戒指', '靴子', '药水'];
+  const name = items[Math.random() * 5 | 0];
+  chain.push({ type: 'item', owner: me, name: name, uuid: Date.now() });
+  saveChain();
+  print('🎁 获得：' + name);
+  showBag();
 }
 
-// 拉取全服链
-async function refreshChain() {
-  try {
-    const res = await fetch(CHAIN_URL)
-    const chain = await res.json()
-    const ok = await verifyChain(chain)
-    if (!ok) {
-      print('❌ 链被篡改！全服拒绝数据')
-      return null
-    }
-    window.GLOBAL_CHAIN = chain
-    print('✅ 全服链同步完成')
-    showBag()
-    return chain
-  } catch (e) {
-    print('⚠️ 使用本地演示链')
-    if (!window.GLOBAL_CHAIN) {
-      const genesis = {
-        index: 0, time: Date.now(), prevHash: '0',
-        data: { type: 'genesis' }, hash: await sha256('genesis')
-      }
-      window.GLOBAL_CHAIN = [genesis]
-    }
-    return window.GLOBAL_CHAIN
-  }
-}
-
-// 合法上链
-async function addBlock(data) {
-  const chain = await refreshChain()
-  if (!chain) return null
-  const valid = await verifyChain(chain)
-  if (!valid) {
-    print('❌ 作弊：链已被篡改')
-    return null
-  }
-  const last = chain[chain.length - 1]
-  const block = {
-    index: chain.length,
-    time: Date.now(),
-    prevHash: last.hash,
-    data,
-    hash: ''
-  }
-  block.hash = await sha256(JSON.stringify({ ...block, hash: '' }))
-  chain.push(block)
-  window.GLOBAL_CHAIN = chain
-  return block
-}
-
-// 打怪
-async function fight() {
-  const me = getMyAddr()
-  if (!me) return print('⚠️ 先创建钱包')
-  const items = ['铁剑', '布衣', '戒指', '靴子', '药水']
-  const item = items[Math.random() * 5 | 0]
-  await addBlock({ type: 'item', owner: me, name: item })
-  print(`🎁 获得：${item}`)
-}
-
-// 背包
+// ========================== 背包（直接显示所有道具） ==========================
 function showBag() {
-  const me = getMyAddr()
-  if (!me || !window.GLOBAL_CHAIN) return
-  const items = window.GLOBAL_CHAIN.filter(b =>
-    b.data.type === 'item' && b.data.owner === me
-  )
-  bagBox.innerHTML = ''
-  items.forEach(it => {
-    const d = document.createElement('div')
-    d.className = 'item'
-    d.innerText = it.data.name
-    bagBox.appendChild(d)
-  })
+  const me = getMe();
+  bagBox.innerHTML = '';
+  if (!me) return;
+  const myItems = chain.filter(i => i.type === 'item' && i.owner === me);
+  myItems.forEach(it => {
+    const d = document.createElement('div');
+    d.className = 'item';
+    d.innerText = it.name;
+    bagBox.appendChild(d);
+  });
 }
 
-// ====================== 道具交易 ======================
-async function sendItem() {
-  const me = getMyAddr()
-  const to = document.getElementById('toAddr').value.trim()
-  const name = document.getElementById('sendItemName').value.trim()
-  if (!me || !to || !name) return print('⚠️ 信息不全')
-  if (me === to) return print('⚠️ 不能发给自己')
+// ========================== 道具交易 ==========================
+function sendItem() {
+  const me = getMe();
+  const to = document.getElementById('toAddr').value.trim();
+  const name = document.getElementById('itemName').value.trim();
+  if (!me || !to || !name) return print('❌ 信息不全');
 
-  const chain = window.GLOBAL_CHAIN
-  const has = chain.some(b =>
-    b.data.type === 'item' && b.data.owner === me && b.data.name === name
-  )
-  if (!has) return print('❌ 你没有这个道具')
+  const item = chain.find(i => i.type === 'item' && i.owner === me && i.name === name);
+  if (!item) return print('❌ 你没有该道具');
 
-  await addBlock({ type: 'trade_remove', from: me, item: name })
-  await addBlock({ type: 'trade_add', to: to, item: name })
-
-  print(`✅ 发送【${name}】成功`)
-  refreshChain()
+  item.owner = to;
+  saveChain();
+  print('✅ 发送成功：' + name);
+  showBag();
 }
 
 // 初始化
-window.onload = () => {
-  if (getMyAddr()) refreshChain()
-}
+showBag();
 </script>
 </body>
 </html>
