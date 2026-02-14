@@ -3,67 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的链游 - 跨设备资产恢复</title>
+    <title>跨设备恢复修复版</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: system-ui, sans-serif;
-        }
-        body {
-            background: #0b0f1a;
-            color: #fff;
-            padding: 20px;
-        }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        .log {
-            background: #121a29;
-            padding: 12px;
-            border-radius: 8px;
-            margin: 10px 0;
-            min-height: 120px;
-            font-size: 13px;
-            white-space: pre-wrap;
-        }
-        .btn {
-            padding: 8px 12px;
-            margin:4px;
-            border:none;
-            border-radius:6px;
-            background:#4a7dff;
-            color:#fff;
-            cursor:pointer;
-        }
-        .btn-success {
-            background: #00C851;
-        }
-        input {
-            width:100%;
-            padding:10px;
-            margin:8px 0;
-            border-radius:6px;
-            border:none;
-            background:#1e2530;
-            color:#fff;
-        }
+        * {box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
+        body {background:#0b0f1a;color:#fff;padding:20px}
+        .container {max-width:600px;margin:0 auto}
+        .log {background:#121a29;padding:12px;border-radius:8px;margin:10px 0;min-height:120px;font-size:13px;white-space:pre-wrap}
+        .btn {padding:8px 12px;margin:4px;border:none;border-radius:6px;background:#4a7dff;color:#fff;cursor:pointer}
+        .btn-success {background:#00C851}
+        .btn-warning {background:#ff8800}
+        input {width:100%;padding:10px;margin:8px 0;border-radius:6px;border:none;background:#1e2530;color:#fff}
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>链游 - 跨设备资产恢复</h1>
-    <p>状态：第五步·账号&资产同步</p>
+    <h1>链游 - 跨设备恢复</h1>
+    <p>状态：第五步·数据同步演示</p>
 
-    <button class="btn" onclick="createWallet()">生成新钱包</button>
+    <button class="btn" onclick="createWallet()">生成钱包</button>
     <button class="btn" onclick="showMyMnemonic()">查看助记词</button>
-    <button class="btn-success" onclick="mintItem()">生成道具【新手剑】</button>
+    <button class="btn-success" onclick="mintItem()">生成新手剑</button>
     <button class="btn" onclick="showMyItems()">查看我的道具</button>
-    <button class="btn" onclick="verifyChain()">校验资产安全</button>
 
-    <input id="inputMnemonic" placeholder="粘贴助记词，跨设备恢复账号+资产">
+    <button class="btn btn-warning" onclick="exportChain()">导出链数据</button>
+    <button class="btn btn-warning" onclick="importChain()">导入链数据</button>
+
+    <input id="inputMnemonic" placeholder="粘贴助记词恢复账号">
     <button class="btn" onclick="restoreWalletAndAssets()">恢复账号&资产</button>
 
     <h3>调试日志</h3>
@@ -74,7 +39,6 @@
 const logDom = document.getElementById('log');
 const STORAGE_MNEMONIC = 'game_mnemonic';
 const STORAGE_CHAIN = 'game_chain';
-
 const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(" ");
 
 function log(text) {
@@ -82,89 +46,81 @@ function log(text) {
 }
 
 // ====================== 钱包 ======================
-function generateMnemonic() {
-    let res = [];
-    for(let i=0; i<12; i++) {
-        let r = Math.floor(Math.random() * words.length);
-        res.push(words[r]);
-    }
-    return res.join(" ");
-}
 function createWallet() {
-    try {
-        const mnemonic = generateMnemonic();
-        localStorage.setItem(STORAGE_MNEMONIC, mnemonic);
-        log("✅ 新钱包已生成");
-    } catch (e) { log("❌ 生成失败："+e.message); }
+    const mnemonic = Array(12).fill(0).map(()=>words[Math.random()*words.length|0]).join(" ");
+    localStorage.setItem(STORAGE_MNEMONIC, mnemonic);
+    log("✅ 钱包已生成");
 }
 function showMyMnemonic() {
     const mne = localStorage.getItem(STORAGE_MNEMONIC);
-    mne ? log("📄 助记词："+mne) : log("⚠️ 未创建钱包");
+    mne ? log("📄 "+mne) : log("⚠️ 未创建钱包");
 }
 
-// ====================== SHA256 ======================
-async function sha256(str) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(str);
-    const hash = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+// ====================== 哈希 ======================
+async function sha256(s) {
+    const enc = new TextEncoder();
+    const d = await crypto.subtle.digest('SHA-256', enc.encode(s));
+    return Array.from(new Uint8Array(d)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-// ====================== 哈希链 ======================
-function initChain() {
-    if(!localStorage.getItem(STORAGE_CHAIN)) localStorage.setItem(STORAGE_CHAIN, JSON.stringify([]));
-}
-function getChain() { return JSON.parse(localStorage.getItem(STORAGE_CHAIN)||'[]'); }
-function saveChain(chain) { localStorage.setItem(STORAGE_CHAIN, JSON.stringify(chain)); }
+// ====================== 链 ======================
+function initChain() { if(!localStorage.getItem(STORAGE_CHAIN)) localStorage.setItem(STORAGE_CHAIN,'[]') }
+function getChain() { return JSON.parse(localStorage.getItem(STORAGE_CHAIN)||'[]') }
+function saveChain(c) { localStorage.setItem(STORAGE_CHAIN, JSON.stringify(c)) }
 
 async function addRecord(data) {
     const chain = getChain();
-    const prevHash = chain.length?chain[chain.length-1].hash:'genesis';
-    const block = {index:chain.length, time:Date.now(), prevHash, data, hash:''};
+    const prev = chain.length ? chain[chain.length-1].hash : 'genesis';
+    const block = {index:chain.length, time:Date.now(), prevHash:prev, data, hash:''};
     block.hash = await sha256(JSON.stringify(block));
     chain.push(block);
     saveChain(chain);
     return block;
 }
 
-async function verifyChain() {
-    const chain = getChain();
-    for(let i=1;i<chain.length;i++){
-        const c=chain[i],p=chain[i-1];
-        const h=await sha256(JSON.stringify({...c,hash:''}));
-        if(c.hash!==h||c.prevHash!==p.hash){log(`❌ 第${i}块被篡改`);return false;}
-    }
-    log("✅ 哈希链完整，资产安全");
-    return true;
-}
-
-// ====================== 道具系统 ======================
+// ====================== 道具 ======================
 async function mintItem() {
     const mne = localStorage.getItem(STORAGE_MNEMONIC);
-    if(!mne) return log("⚠️ 请先生成钱包");
-    const b = await addRecord({type:"item",owner:mne,itemName:"新手剑",itemId:"item_"+Date.now()});
-    log(`✅ 获得【新手剑】 记录#${b.index}`);
+    if(!mne) return log("⚠️ 先创建钱包");
+    const b = await addRecord({type:"item", owner:mne, itemName:"新手剑", id:Date.now()});
+    log(`✅ 获得新手剑 #${b.index}`);
 }
 
 function showMyItems() {
     const mne = localStorage.getItem(STORAGE_MNEMONIC);
-    if(!mne) return log("⚠️ 请先生成钱包");
-    const items = getChain().filter(b=>b.data.type==="item"&&b.data.owner===mne);
-    items.length?log(`🎒 共有${items.length}件道具`)+items.forEach(i=>log(`- ${i.data.itemName}`)):log("🎒 背包空");
+    if(!mne) return log("⚠️ 先创建钱包");
+    const items = getChain().filter(i=>i.data.type==="item" && i.data.owner===mne);
+    items.length ? log(`🎒 道具数量：${items.length}`) : log("🎒 背包空");
 }
 
-// ====================== 跨设备恢复（本步核心） ======================
+// ====================== 恢复 ======================
 function restoreWalletAndAssets() {
     const val = document.getElementById('inputMnemonic').value.trim();
-    if(!val || val.split(/\s+/).length!==12) return log("❌ 请输入12个单词助记词");
+    if(val.split(/\s+/).length!==12) return log("❌ 格式错误");
     localStorage.setItem(STORAGE_MNEMONIC, val);
-    log("✅ 账号恢复成功！");
-    log("🔍 正在读取链上属于你的资产...");
+    log("✅ 账号已恢复");
     showMyItems();
 }
 
-// ====================== 初始化 ======================
-window.onload = () => { initChain(); log("游戏加载完成 ✅"); };
+// ====================== 导出/导入链（解决你现在的问题） ======================
+function exportChain() {
+    const chain = getChain();
+    const str = JSON.stringify(chain);
+    navigator.clipboard.writeText(str);
+    log("📤 链数据已复制，去新浏览器粘贴导入");
+}
+
+function importChain() {
+    const str = prompt("粘贴链数据：");
+    try {
+        const chain = JSON.parse(str);
+        saveChain(chain);
+        log("📥 链数据导入成功！");
+        showMyItems();
+    } catch(e) { log("❌ 格式错误"); }
+}
+
+window.onload = initChain;
 </script>
 </body>
 </html>
