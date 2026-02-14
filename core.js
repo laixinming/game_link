@@ -1,7 +1,8 @@
 // ======================
-// 底层不可篡改核心库 - 同步接口版
+// 底层不可篡改核心库 - 装备状态聚合版
 // 安全：AES加密 + 查看助记词/导出需密码
-// 新增：同步接口，游戏层无需 async/await
+// 同步：全同步接口，无async/await
+// 新增：装备强化/镶嵌/消耗/状态聚合
 // ======================
 const Core = (function() {
   const KEY_MNE_HASH = 'wallet_mnemonic_hash';
@@ -198,8 +199,8 @@ const Core = (function() {
   ];
 
   let _memMnemonic = null;
-  // 🔥 内存缓存：同步接口用
-  let _myDataCache = [];
+  let _myDataCache = [];       // 原始全量数据
+  let _myItemStateCache = [];  // 聚合后的最新装备状态
 
   function log(t) {
     const el = document.getElementById('log');
@@ -256,23 +257,21 @@ const Core = (function() {
   function isUnlocked() { return !!_memMnemonic; }
   function hasWalletBind() { return !!localStorage.getItem(KEY_MNE_HASH); }
 
-  // 🔥 同步获取数据（游戏层直接用）
+  // ====================== 同步数据接口 ======================
   function getMyDataSync() {
     return _myDataCache;
   }
 
-  // 🔥 同步存数据（底层异步更新）
   function saveGameDataSync(bizData) {
     if (!isUnlocked()) {
       log('⚠️ 请先解锁钱包');
       return false;
     }
-    // 异步存链，上层同步调用
     _realSaveGameData(bizData);
     return true;
   }
 
-  // 真实异步存储（内部用）
+  // 真实异步存储
   async function _realSaveGameData(bizData) {
     const chain = JSON.parse(localStorage.getItem(KEY_CHAIN));
     const prevHash = chain.length ? chain[chain.length - 1].hash : 'genesis';
@@ -285,15 +284,48 @@ const Core = (function() {
     chain.push(block);
     localStorage.setItem(KEY_CHAIN, JSON.stringify(chain));
     await _refreshCache();
+    await _refreshItemState();
     log('📦 数据已保存');
   }
 
-  // 刷新内存缓存
+  // 刷新原始数据缓存
   async function _refreshCache() {
     if (!isUnlocked()) return;
     const me = await sha256(_memMnemonic);
     const chain = JSON.parse(localStorage.getItem(KEY_CHAIN) || '[]');
     _myDataCache = chain.map(b => b.data).filter(d => d.owner === me);
+  }
+
+  // ====================== 🔥 核心：装备状态聚合 ======================
+  async function _refreshItemState() {
+    if (!isUnlocked()) return;
+    const items = _myDataCache.filter(d => d.type === 'item');
+    const itemMap = {};
+
+    // 按itemId聚合所有记录（强化/镶嵌/消耗）
+    for (const data of _myDataCache) {
+      if (!data.itemId) continue;
+      const id = data.itemId;
+      if (!itemMap[id]) itemMap[id] = { ...data };
+      else itemMap[id] = { ...itemMap[id], ...data };
+    }
+
+    // 过滤：只保留未消耗的装备
+    _myItemStateCache = Object.values(itemMap).filter(it => !it.deleted);
+  }
+
+  // 获取【最新、可用】的装备列表
+  function getMyItemsSync() {
+    return _myItemStateCache;
+  }
+
+  // 消耗道具（标记删除）
+  function consumeItemSync(itemId) {
+    return saveGameDataSync({
+      type: 'item',
+      itemId,
+      deleted: true
+    });
   }
 
   // ====================== 解锁 / 创建 / 恢复 ======================
@@ -304,6 +336,7 @@ const Core = (function() {
     if (!mne) { log('❌ 密码错误'); return; }
     _memMnemonic = mne;
     await _refreshCache();
+    await _refreshItemState();
     log('✅ 解锁成功');
     autoLogin();
   }
@@ -343,6 +376,7 @@ const Core = (function() {
     localStorage.setItem(KEY_MNE_HASH, mneHash);
     _memMnemonic = mne;
     await _refreshCache();
+    await _refreshItemState();
     log('✅ 钱包创建成功！请保存助记词：');
     log('📄 ' + mne);
     autoLogin();
@@ -370,6 +404,7 @@ const Core = (function() {
     localStorage.setItem(KEY_MNE_HASH, inputHash);
     _memMnemonic = inputVal;
     await _refreshCache();
+    await _refreshItemState();
     log('✅ 恢复成功');
     autoLogin();
   }
@@ -426,9 +461,11 @@ const Core = (function() {
     unlockWallet,
     showMnemonic,
     restoreByMnemonic,
-    // 🔥 同步接口（游戏层用这个）
     getMyDataSync,
     saveGameDataSync,
+    // 🔥 新增：装备聚合接口
+    getMyItemsSync,
+    consumeItemSync,
     verifyChainBtn,
     exportArchive,
     importArchive
