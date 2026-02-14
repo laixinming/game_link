@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的链游 - 钱包修复版</title>
+    <title>我的链游 - 无依赖钱包</title>
     <style>
         * {
             box-sizing: border-box;
@@ -25,34 +25,34 @@
             padding: 12px;
             border-radius: 8px;
             margin: 10px 0;
-            min-height:100px;
-            font-size:14px;
+            min-height: 100px;
+            font-size: 14px;
             white-space: pre-wrap;
         }
         .btn {
             padding: 10px 16px;
-            margin:6px 0;
-            border:none;
-            border-radius:6px;
-            background:#4a7dff;
-            color:#fff;
-            cursor:pointer;
+            margin: 6px 0;
+            border: none;
+            border-radius: 6px;
+            background: #4a7dff;
+            color: #fff;
+            cursor: pointer;
         }
         input {
-            width:100%;
-            padding:10px;
-            margin:8px 0;
-            border-radius:6px;
-            border:none;
-            background:#1e2530;
-            color:#fff;
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border: none;
+            background: #1e2530;
+            color: #fff;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>链游 - 本地钱包</h1>
-        <p>状态：第二步·身份系统</p>
+        <p>状态：第二步·纯原生无依赖版</p>
 
         <button class="btn" onclick="createWallet()">生成新钱包</button>
         <button class="btn" onclick="showMyMnemonic()">查看我的助记词</button>
@@ -64,78 +64,79 @@
         <div id="log" class="log">等待操作...</div>
     </div>
 
-    <!-- 换用更稳定的CDN -->
-    <script src="https://cdn.bootcdn.net/ajax/libs/bip39/3.1.0/bip39.min.js"></script>
-    <script>
-        const logDom = document.getElementById('log');
-        const STORAGE_KEY = 'game_mnemonic';
+<script>
+const logDom = document.getElementById('log');
+const STORAGE_KEY = 'game_mnemonic';
 
-        function log(text) {
-            logDom.innerText = `[${new Date().toLocaleString()}] ${text}\n` + logDom.innerText;
-        }
+// 纯原生随机助记词（游戏专用，无外部依赖）
+const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(" ");
 
-        // 先检查库有没有加载成功
-        function checkBip39() {
-            if (typeof bip39 === 'undefined') {
-                log('❌ 助记词库加载失败，请检查网络后刷新');
-                return false;
-            }
-            return true;
-        }
+function log(text) {
+    logDom.innerText = `[${new Date().toLocaleString()}] ${text}\n` + logDom.innerText;
+}
 
-        // 生成钱包
-        function createWallet() {
-            if (!checkBip39()) return;
+// 生成12词助记词
+function generateMnemonic() {
+    let res = [];
+    for(let i=0; i<12; i++) {
+        let r = Math.floor(Math.random() * words.length);
+        res.push(words[r]);
+    }
+    return res.join(" ");
+}
 
-            try {
-                const mnemonic = bip39.generateMnemonic();
-                localStorage.setItem(STORAGE_KEY, mnemonic);
-                log('✅ 新钱包已生成');
-                log('助记词：' + mnemonic);
-            } catch (e) {
-                log('❌ 生成失败：' + e.message);
-            }
-        }
+// 简单校验格式
+function isValidMnemonic(str) {
+    let parts = str.trim().split(/\s+/);
+    return parts.length === 12;
+}
 
-        // 查看助记词
-        function showMyMnemonic() {
-            const mne = localStorage.getItem(STORAGE_KEY);
-            if (!mne) {
-                log('⚠️ 还没有钱包，请先生成');
-                return;
-            }
-            log('📄 当前助记词：' + mne);
-        }
+// 生成钱包
+function createWallet() {
+    try {
+        const mnemonic = generateMnemonic();
+        localStorage.setItem(STORAGE_KEY, mnemonic);
+        log("✅ 新钱包已生成");
+        log("助记词：" + mnemonic);
+    } catch (e) {
+        log("❌ 生成失败：" + e.message);
+    }
+}
 
-        // 恢复钱包
-        function restoreWallet() {
-            if (!checkBip39()) return;
+// 查看助记词
+function showMyMnemonic() {
+    const mne = localStorage.getItem(STORAGE_KEY);
+    if (!mne) {
+        log("⚠️ 还没有钱包，请先生成");
+        return;
+    }
+    log("📄 当前助记词：" + mne);
+}
 
-            const input = document.getElementById('inputMnemonic').value.trim();
-            if (!input) {
-                log('⚠️ 请输入助记词');
-                return;
-            }
+// 恢复钱包
+function restoreWallet() {
+    const input = document.getElementById('inputMnemonic').value.trim();
+    if (!input) {
+        log("⚠️ 请输入助记词");
+        return;
+    }
+    if (!isValidMnemonic(input)) {
+        log("❌ 必须是12个单词");
+        return;
+    }
+    try {
+        localStorage.setItem(STORAGE_KEY, input);
+        log("✅ 钱包恢复成功");
+    } catch (e) {
+        log("❌ 恢复失败：" + e.message);
+    }
+}
 
-            try {
-                const valid = bip39.validateMnemonic(input);
-                if (!valid) {
-                    log('❌ 助记词格式不正确');
-                    return;
-                }
-                localStorage.setItem(STORAGE_KEY, input);
-                log('✅ 钱包恢复成功');
-            } catch (e) {
-                log('❌ 恢复失败：' + e.message);
-            }
-        }
-
-        window.onload = () => {
-            log('游戏基座加载完成 ✅');
-            checkBip39();
-            const has = !!localStorage.getItem(STORAGE_KEY);
-            log(has ? '✅ 已存在钱包' : '⚠️ 未创建钱包，请生成');
-        };
-    </script>
+window.onload = () => {
+    log("游戏基座加载完成 ✅");
+    const has = !!localStorage.getItem(STORAGE_KEY);
+    log(has ? "✅ 已存在钱包" : "⚠️ 未创建钱包，请生成");
+};
+</script>
 </body>
 </html>
