@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>跨浏览器永不丢装备·最终版</title>
+<title>跨浏览器永不丢装备·稳定版</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
 body{background:#0a0f1e;color:#e6e9f0;padding:15px}
@@ -20,7 +20,7 @@ input{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;backgro
 </head>
 <body>
 <div class="game">
-  <div class="head">全服统一私链·跨浏览器不丢装</div>
+  <div class="head">全服统一私链·稳定版</div>
   <div class="panel">
     <button class="btn" onclick="createWallet()">🪙 创建钱包</button>
     <button class="btn" onclick="showMnemonic()">📄 助记词</button>
@@ -47,8 +47,8 @@ const bagBox = document.getElementById('bag');
 const KEY_MNE = 'game_mne';
 const KEY_ADDR = 'game_addr';
 
-// 👉 部署后改成你 Vercel 的 chain.json 地址
-const CHAIN_URL = 'https://你的域名.vercel.app/chain.json';
+// 👉 改成你的 Vercel 域名
+const CHAIN_URL = 'https://game-link-8n5w.vercel.app/chain.json';
 
 const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(' ');
 
@@ -56,7 +56,7 @@ function print(text) {
   logBox.innerText = `[${new Date().toLocaleTimeString()}] ${text}\n` + logBox.innerText;
 }
 
-// ============== 账号 ==============
+// ============== 1. 账号系统（完全保留） ==============
 function createWallet() {
   const mne = Array(12).fill(0).map(()=>words[Math.random()*words.length|0]).join(' ');
   const addr = mne.replace(/\s/g, '').slice(-16);
@@ -87,23 +87,58 @@ function getMe() {
   return localStorage.getItem(KEY_ADDR);
 }
 
-// ============== 全服唯一快照链 ==============
-async function getGlobalState() {
+// ============== 2. 核心修复：链数据读写完整实现 ==============
+// 读取全服数据
+async function readChain() {
   try {
     const res = await fetch(CHAIN_URL + '?t=' + Date.now());
     return await res.json();
   } catch (e) {
+    print('⚠️ 首次加载，创建新链');
     return {};
   }
 }
 
-// ============== 刷新背包（从全服链读取） ==============
+// 写入全服数据（关键修复）
+async function writeChain(newState) {
+  try {
+    const res = await fetch(CHAIN_URL, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(newState, null, 2),
+    });
+    if (res.ok) {
+      print('📝 链数据已保存');
+      return true;
+    }
+    print('❌ 保存失败，状态码: '+res.status);
+    return false;
+  } catch (e) {
+    print('❌ 保存出错: '+e.message);
+    return false;
+  }
+}
+
+// ============== 3. 背包显示（修复不显示问题） ==============
 async function refreshBag() {
   const me = getMe();
-  if(!me) return;
-  const state = await getGlobalState();
+  if(!me) return print('❌ 先创建/恢复账号');
+  
+  const state = await readChain();
   const myItems = state[me] || [];
+  
+  // 强制清空并重新渲染（解决不显示问题）
   bagBox.innerHTML = '';
+  if (myItems.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'item';
+    empty.innerText = '空空如也';
+    bagBox.appendChild(empty);
+    return;
+  }
+  
   myItems.forEach(name => {
     const d = document.createElement('div');
     d.className = 'item';
@@ -112,41 +147,48 @@ async function refreshBag() {
   });
 }
 
-// ============== 打怪 ==============
+// ============== 4. 打怪功能（修复不保存问题） ==============
 async function fight() {
   const me = getMe();
   if(!me) return print('❌ 先创建钱包');
   
-  const state = await getGlobalState();
+  const state = await readChain();
   const items = ['铁剑','布衣','戒指','靴子','药水'];
   const name = items[Math.random()*5|0];
   
   state[me] = state[me] || [];
   state[me].push(name);
   
+  // 关键：保存到链
+  await writeChain(state);
+  
   print('🎁 获得：'+name);
   refreshBag();
 }
 
-// ============== 发送道具 ==============
+// ============== 5. 发送道具（修复不保存问题） ==============
 async function sendItem() {
   const me = getMe();
   const to = document.getElementById('toAddr').value.trim();
   const name = document.getElementById('itemName').value.trim();
   if(!me || !to || !name) return print('❌ 信息不全');
 
-  const state = await getGlobalState();
+  const state = await readChain();
   if(!state[me]?.includes(name)) return print('❌ 无此道具');
 
+  // 转移道具
   state[me].splice(state[me].indexOf(name), 1);
   state[to] = state[to] || [];
   state[to].push(name);
+  
+  // 关键：保存到链
+  await writeChain(state);
   
   print('✅ 发送成功：'+name);
   refreshBag();
 }
 
-// 初始化
+// 初始化：页面加载立即刷新背包
 refreshBag();
 </script>
 </body>
