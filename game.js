@@ -1,12 +1,10 @@
 // ======================
-// 游戏业务层（稳定版）
-// 只写玩法：装备、技能、强化、宝石等
-// 完全不修改底层
+// 游戏业务层 - 同步版（无异步、无await、不踩坑）
 // ======================
 const Game = {
-  // 给玩家新手剑
-  async givePlayerSword() {
-    await Core.saveGameData({
+  // 生成新手剑（同步）
+  givePlayerSword() {
+    Core.saveGameDataSync({
       type: 'item',
       name: '新手剑',
       attack: 15,
@@ -15,20 +13,20 @@ const Game = {
     this.showMyBag();
   },
 
-  // 查看背包（修复异步问题）
-  async showMyBag() {
-    const myData = await Core.getMyGameData();
-    const items = myData.filter(d => d.type === 'item');
-    let txt = `🎒 我的背包（仅自己可见）\n`;
+  // 查看背包（同步，点了就显示）
+  showMyBag() {
+    const allData = Core.getMyDataSync();
+    const items = allData.filter(d => d.type === 'item');
+    let txt = `🎒 我的背包\n`;
     items.forEach(it => {
       txt += `· ${it.name} 攻击+${it.attack}\n`;
     });
     document.getElementById('log').innerText = txt;
   },
 
-  // 学习技能
-  async learnSkill(skillName, damage) {
-    await Core.saveGameData({
+  // 学习技能（同步）
+  learnSkill(skillName, damage) {
+    Core.saveGameDataSync({
       type: 'skill',
       name: skillName,
       damage: damage
@@ -36,9 +34,9 @@ const Game = {
     this.showMyBag();
   },
 
-  // 装备强化
-  async enhanceItem(itemId, level) {
-    await Core.saveGameData({
+  // 装备强化（同步）
+  enhanceItem(itemId, level) {
+    Core.saveGameDataSync({
       type: 'enhance',
       itemId: itemId,
       level: level
@@ -46,9 +44,9 @@ const Game = {
     this.showMyBag();
   },
 
-  // 宝石镶嵌
-  async insertGem(itemId, gemName, attr) {
-    await Core.saveGameData({
+  // 宝石镶嵌（同步）
+  insertGem(itemId, gemName, attr) {
+    Core.saveGameDataSync({
       type: 'gem',
       itemId: itemId,
       gemName: gemName,
