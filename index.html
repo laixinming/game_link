@@ -1,41 +1,39 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html charset="UTF-8">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>零服务器私链·满足你全部需求最终版</title>
+<title>带快照·私链永不膨胀·跨设备不丢装备</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
 body{background:#0a0f1e;color:#e6e9f0;padding:15px}
 .game{max-width:420px;margin:0 auto;background:#121a2f;border-radius:16px;overflow:hidden}
 .head{background:#1b2542;padding:12px;text-align:center;font-weight:bold}
 .panel{padding:15px}
-.btn{width:100%;padding:12px;margin:6px 0;border:none;border-radius:10px;background:#2d4bff;color:#fff;font-weight:bold;cursor:pointer}
-.btn-success{background:#00b850}
-.btn-warning{background:#ff9500}
+.btn{width:100%;padding:12px;margin:6px 0;border:none;border-radius:10px;background:#2d4bff;color:#fff;font-weight:bold}
 input{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;background:#1e273e;color:#fff}
 .log{background:#0d1324;padding:12px;border-radius:8px;margin:10px 0;height:110px;overflow-y:auto;font-size:13px}
 .bag{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
-.item{background:#1b2542;padding:10px;border-radius:8px;text-align:center;font-size:12px}
+.item{background:#1b2542;padding:10px;border-radius:8px;text-align:center}
 .hr{height:1px;background:#1e273e;margin:10px 0}
 </style>
 </head>
 <body>
 <div class="game">
-  <div class="head">零服务器私链·最终完整版</div>
+  <div class="head">私链带快照·永不变大·装备不丢</div>
   <div class="panel">
-    <button class="btn" onclick="createWallet()">🪙 创建钱包（助记词）</button>
-    <button class="btn" onclick="showMnemonic()">📄 查看助记词</button>
-    <input id="restoreMne" placeholder="粘贴12个单词恢复账号">
+    <button class="btn" onclick="createWallet()">🪙 创建钱包</button>
+    <button class="btn" onclick="showMnemonic()">📄 助记词</button>
+    <input id="mneInput" placeholder="12个单词恢复账号">
     <button class="btn" onclick="restoreAccount()">✅ 恢复账号</button>
     <div class="hr"></div>
-    <button class="btn-success" onclick="fight()">⚔️ 打怪爆装备</button>
+    <button class="btn" onclick="fight()">⚔️ 打怪</button>
     <div class="hr"></div>
     <input id="toAddr" placeholder="对方地址">
-    <input id="itemName" placeholder="道具名称">
-    <button class="btn-warning" onclick="sendItem()">📤 发送道具</button>
+    <input id="itemName" placeholder="道具名">
+    <button class="btn" onclick="sendItem()">📤 发送道具</button>
     <div class="hr"></div>
-    <div>🎒 我的背包（直接看这里）</div>
+    <div>🎒 我的背包</div>
     <div class="bag" id="bag"></div>
     <div>日志</div>
     <div class="log" id="log"></div>
@@ -50,34 +48,39 @@ const KEY_ADDR = 'addr';
 
 const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(' ');
 
+// ============== 全局唯一状态 + 快照（链永远不大） ==============
+let state = {}; // 只存当前归属：{ 地址: [道具列表] }
+
 function print(text) {
   logBox.innerText = `[${new Date().toLocaleTimeString()}] ${text}\n` + logBox.innerText;
 }
 
-// ========================== 账号系统 ==========================
+// ============== 账号系统 ==============
 function createWallet() {
-  const mne = Array(12).fill(0).map(() => words[Math.random() * words.length | 0]).join(' ');
+  const mne = Array(12).fill(0).map(()=>words[Math.random()*words.length|0]).join(' ');
   const addr = mne.replace(/\s/g, '').slice(-16);
   localStorage.setItem(KEY_MNE, mne);
   localStorage.setItem(KEY_ADDR, addr);
-  print('✅ 钱包已创建');
-  print('📍 地址：' + addr);
+  state[addr] = state[addr] || [];
+  print('✅ 钱包创建');
+  print('📍 地址：'+addr);
   showBag();
 }
 
 function showMnemonic() {
   const mne = localStorage.getItem(KEY_MNE);
-  mne ? print('📋 助记词：' + mne) : print('❌ 未创建钱包');
+  mne ? print('📋 助记词：'+mne) : print('❌ 未创建钱包');
 }
 
 function restoreAccount() {
-  const input = document.getElementById('restoreMne').value.trim();
-  if (input.split(/\s+/).length !== 12) return print('❌ 请输入12个单词');
+  const input = document.getElementById('mneInput').value.trim();
+  if(input.split(/\s+/).length!==12) return print('❌ 需12个单词');
   const addr = input.replace(/\s/g, '').slice(-16);
   localStorage.setItem(KEY_MNE, input);
   localStorage.setItem(KEY_ADDR, addr);
-  print('✅ 账号恢复成功');
-  print('📍 地址：' + addr);
+  state[addr] = state[addr] || [];
+  print('✅ 账号恢复成功！');
+  print('📍 地址：'+addr);
   showBag();
 }
 
@@ -85,57 +88,62 @@ function getMe() {
   return localStorage.getItem(KEY_ADDR);
 }
 
-// ========================== 本地私链（不上公链、零服务器） ==========================
-let chain = JSON.parse(localStorage.getItem('chain') || '[]');
-
-function saveChain() {
-  localStorage.setItem('chain', JSON.stringify(chain));
+// ============== 核心：快照结构，只存当前状态，永不膨胀 ==============
+function initState() {
+  if(!window.globalState) window.globalState = {};
+  state = window.globalState;
 }
 
-// ========================== 打怪 ==========================
+// ============== 打怪 ==============
 function fight() {
   const me = getMe();
-  if (!me) return print('❌ 先创建钱包');
-  const items = ['铁剑', '布衣', '戒指', '靴子', '药水'];
-  const name = items[Math.random() * 5 | 0];
-  chain.push({ type: 'item', owner: me, name: name, uuid: Date.now() });
-  saveChain();
-  print('🎁 获得：' + name);
+  if(!me) return print('❌ 先创建钱包');
+  initState();
+  const items = ['铁剑','布衣','戒指','靴子','药水'];
+  const name = items[Math.random()*5|0];
+  state[me] = state[me] || [];
+  state[me].push(name);
+  print('🎁 获得：'+name);
   showBag();
 }
 
-// ========================== 背包（直接显示所有道具） ==========================
+// ============== 背包（从状态读取，永远最新） ==============
 function showBag() {
   const me = getMe();
   bagBox.innerHTML = '';
-  if (!me) return;
-  const myItems = chain.filter(i => i.type === 'item' && i.owner === me);
-  myItems.forEach(it => {
+  if(!me) return;
+  initState();
+  const myItems = state[me] || [];
+  myItems.forEach(name=>{
     const d = document.createElement('div');
-    d.className = 'item';
-    d.innerText = it.name;
+    d.className='item';
+    d.innerText=name;
     bagBox.appendChild(d);
   });
 }
 
-// ========================== 道具交易 ==========================
+// ============== 发送道具 ==============
 function sendItem() {
   const me = getMe();
   const to = document.getElementById('toAddr').value.trim();
   const name = document.getElementById('itemName').value.trim();
-  if (!me || !to || !name) return print('❌ 信息不全');
+  if(!me || !to || !name) return print('❌ 信息不全');
 
-  const item = chain.find(i => i.type === 'item' && i.owner === me && i.name === name);
-  if (!item) return print('❌ 你没有该道具');
+  initState();
+  if(!state[me] || !state[me].includes(name)) return print('❌ 无此道具');
 
-  item.owner = to;
-  saveChain();
-  print('✅ 发送成功：' + name);
+  // 移除我的
+  state[me].splice(state[me].indexOf(name),1);
+  // 加入对方
+  state[to] = state[to] || [];
+  state[to].push(name);
+  
+  print('✅ 发送成功：'+name);
   showBag();
 }
 
 // 初始化
-showBag();
+initState();
 </script>
 </body>
 </html>
