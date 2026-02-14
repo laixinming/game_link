@@ -1,13 +1,15 @@
 // ======================
-// 底层不可篡改核心库 - 安全最终版
-// 功能：钱包、助记词、哈希链、数据强绑定钱包、通用存储接口
-// 安全：BIP39词库 + 密码学安全随机 + 不存明文助记词
+// 底层不可篡改核心库 - 最终稳定安全版
+// 功能：钱包、助记词、哈希链、数据强绑定钱包
+// 安全：BIP39词库 + 密码学随机 + 不暴露明文
+// 体验：刷新不掉线 / 关浏览器需重输
 // ======================
 const Core = (function() {
-  const KEY_MNE_HASH = 'wallet_mnemonic_hash'; // 只存哈希，不存原文
+  const KEY_MNE_HASH = 'wallet_mnemonic_hash';
   const KEY_CHAIN = 'game_chain';
+  const SESSION_MNEMONIC = 'session_mnemonic'; // 会话临时存
 
-  // BIP39 标准英文词库（2048词，公开安全，无风险）
+  // BIP39 标准英文词库（2048词）
   const words = [
 "abandon","ability","able","about","above","absent","absorb","abstract","absurd","abuse",
 "access","accident","account","accuse","achieve","acid","acoustic","acquire","across","act",
@@ -195,16 +197,13 @@ const Core = (function() {
 "yard","year","yellow","you","young","youth","zebra","zephyr","zinc","zone","zoo"
   ];
 
-  // 内存中临时保存当前助记词（刷新即消失）
-  let _tempCurrentMnemonic = null;
-
-  // 日志输出
+  // 日志
   function log(t) {
     const el = document.getElementById('log');
     if (el) el.innerText = `[${new Date().toLocaleString()}] ${t}\n` + el.innerText;
   }
 
-  // SHA256 哈希
+  // SHA256
   async function sha256(s) {
     const enc = new TextEncoder();
     const d = await crypto.subtle.digest('SHA-256', enc.encode(s));
@@ -218,59 +217,57 @@ const Core = (function() {
     }
   }
 
-  // 钱包状态：已绑定过助记词
-  function hasWallet() {
-    return !!localStorage.getItem(KEY_MNE_HASH);
+  // 获取当前助记词（会话级）
+  function getCurrentMnemonic() {
+    return sessionStorage.getItem(SESSION_MNEMONIC);
   }
 
-  // 自动登录
+  // 是否登录
+  function hasWallet() {
+    return !!localStorage.getItem(KEY_MNE_HASH) && !!getCurrentMnemonic();
+  }
+
+  // 自动登录：刷新自动恢复会话
   function autoLogin() {
     initChain();
     if (hasWallet()) {
-      log('✅ 自动登录成功');
+      log('✅ 自动登录成功（会话已恢复）');
       if (window.Game) Game.showMyBag();
     } else {
-      log('ℹ️ 请创建或恢复钱包');
+      log('ℹ️ 请创建钱包或输入助记词恢复');
     }
   }
 
-  // ====================== 安全创建钱包（密码学随机） ======================
+  // 创建钱包（安全随机）
   async function createWallet() {
-    if (hasWallet()) {
-      log('⚠️ 已有钱包，无需重复创建');
+    if (localStorage.getItem(KEY_MNE_HASH)) {
+      log('⚠️ 已存在钱包，请勿重复创建');
       return;
     }
 
-    // 密码学安全随机数
     const randArray = new Uint32Array(12);
     crypto.getRandomValues(randArray);
-
-    // 生成12个单词助记词
     const mnemonic = Array.from(randArray).map(num => words[num % words.length]).join(' ');
-    _tempCurrentMnemonic = mnemonic;
 
-    // 只存哈希，不存原文
     const mneHash = await sha256(mnemonic);
     localStorage.setItem(KEY_MNE_HASH, mneHash);
+    sessionStorage.setItem(SESSION_MNEMONIC, mnemonic);
 
-    log('✅ 新钱包已创建！请立刻保存助记词！');
+    log('✅ 钱包已创建！请立即保存助记词！');
     log('📄 ' + mnemonic);
+    autoLogin();
   }
 
-  // 查看助记词（仅内存）
+  // 查看助记词
   function showMnemonic() {
-    if (!_tempCurrentMnemonic) {
-      log('⚠️ 请重新恢复助记词（刷新后内存清空）');
-      return;
-    }
-    log('📄 助记词：' + _tempCurrentMnemonic);
+    const mne = getCurrentMnemonic();
+    mne ? log('📄 助记词：' + mne) : log('⚠️ 请先恢复账号');
   }
 
-  // ====================== 助记词恢复账号 ======================
+  // 助记词恢复
   async function restoreByMnemonic() {
     const inputVal = document.getElementById('input_mne').value.trim();
     const wordArr = inputVal.split(/\s+/).filter(w => w);
-
     if (wordArr.length !== 12) {
       log('❌ 助记词必须为12个单词');
       return;
@@ -279,94 +276,85 @@ const Core = (function() {
     const inputHash = await sha256(inputVal);
     const savedHash = localStorage.getItem(KEY_MNE_HASH);
 
-    // 首次恢复
-    if (!savedHash) {
-      localStorage.setItem(KEY_MNE_HASH, inputHash);
-    } else if (inputHash !== savedHash) {
-      log('❌ 助记词错误，校验不通过');
+    if (savedHash && inputHash !== savedHash) {
+      log('❌ 助记词不匹配');
       return;
     }
 
-    _tempCurrentMnemonic = inputVal;
-    log('✅ 账号恢复成功');
-    if (window.Game) Game.showMyBag();
+    if (!savedHash) {
+      localStorage.setItem(KEY_MNE_HASH, inputHash);
+    }
+
+    sessionStorage.setItem(SESSION_MNEMONIC, inputVal);
+    log('✅ 账号恢复成功，刷新不会丢失');
+    autoLogin();
   }
 
-  // ====================== 核心通用接口 ======================
-  // 保存游戏数据（自动绑定当前钱包）
+  // 保存游戏数据
   async function saveGameData(bizData) {
-    if (!hasWallet() || !_tempCurrentMnemonic) {
-      log('⚠️ 请先恢复/创建钱包');
+    const mne = getCurrentMnemonic();
+    if (!mne) {
+      log('⚠️ 请先登录');
       return false;
     }
 
     const chain = JSON.parse(localStorage.getItem(KEY_CHAIN));
     const prevHash = chain.length ? chain[chain.length - 1].hash : 'genesis';
-
-    const blockData = {
-      owner: await sha256(_tempCurrentMnemonic), // 存哈希，不存原文
-      ...bizData
-    };
+    const ownerHash = await sha256(mne);
 
     const block = {
       index: chain.length,
       time: Date.now(),
       prevHash,
-      data: blockData,
+      data: { owner: ownerHash, ...bizData },
       hash: ''
     };
 
     block.hash = await sha256(JSON.stringify(block));
     chain.push(block);
     localStorage.setItem(KEY_CHAIN, JSON.stringify(chain));
-
-    log('📦 数据已上链·绑定钱包');
+    log('📦 数据已保存（绑定钱包）');
     return true;
   }
 
-  // 只获取当前钱包的数据
+  // 获取我的数据（同步版，兼容游戏层）
   async function getMyGameData() {
-    if (!hasWallet() || !_tempCurrentMnemonic) return [];
-
-    const myHash = await sha256(_tempCurrentMnemonic);
+    const mne = getCurrentMnemonic();
+    if (!mne) return [];
+    const myHash = await sha256(mne);
     const chain = JSON.parse(localStorage.getItem(KEY_CHAIN) || '[]');
-
     return chain.map(b => b.data).filter(d => d.owner === myHash);
   }
 
-  // 校验数据是否被篡改
-  async function verifyChain() {
-    const chain = JSON.parse(localStorage.getItem(KEY_CHAIN) || '[]');
-    for (let i = 1; i < chain.length; i++) {
-      const cur = chain[i], pre = chain[i - 1];
-      const reHash = await sha256(JSON.stringify({ ...cur, hash: '' }));
-      if (cur.hash !== reHash || cur.prevHash !== pre.hash) return false;
-    }
-    return true;
-  }
-
+  // 校验
   async function verifyChainBtn() {
-    (await verifyChain()) ? log('✅ 数据完好·未篡改') : log('❌ 数据已被篡改！');
+    const chain = JSON.parse(localStorage.getItem(KEY_CHAIN) || '[]');
+    let ok = true;
+    for (let i = 1; i < chain.length; i++) {
+      const cur = chain[i], pre = chain[i-1];
+      const reHash = await sha256(JSON.stringify({...cur, hash:''}));
+      if (cur.hash !== reHash || cur.prevHash !== pre.hash) { ok = false; break; }
+    }
+    ok ? log('✅ 数据完整未篡改') : log('❌ 数据已被篡改！');
   }
 
-  // 导出存档
+  // 导出 / 导入
   function exportArchive() {
     const data = {
       mnemonicHash: localStorage.getItem(KEY_MNE_HASH),
       chain: JSON.parse(localStorage.getItem(KEY_CHAIN))
     };
-    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
     const u = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = u; a.download = 'archive.json'; a.click();
+    a.href=u; a.download='archive.json'; a.click();
     URL.revokeObjectURL(u);
-    log('📤 存档导出成功');
+    log('📤 存档已导出');
   }
 
-  // 导入存档
   function importArchive() {
     const i = document.createElement('input');
-    i.type = 'file'; i.accept = '.json';
+    i.type='file'; i.accept='.json';
     i.onchange = e => {
       const fr = new FileReader();
       fr.onload = ev => {
@@ -374,9 +362,8 @@ const Core = (function() {
           const d = JSON.parse(ev.target.result);
           localStorage.setItem(KEY_MNE_HASH, d.mnemonicHash);
           localStorage.setItem(KEY_CHAIN, JSON.stringify(d.chain));
-          log('📥 存档导入成功');
-          log('ℹ️ 请重新输入助记词解锁数据');
-        } catch (e) { log('❌ 导入失败'); }
+          log('📥 导入成功，请输入助记词解锁');
+        } catch(e) { log('❌ 导入失败'); }
       };
       fr.readAsText(e.target.files[0]);
     };
@@ -385,7 +372,6 @@ const Core = (function() {
 
   return {
     init: autoLogin,
-    hasWallet,
     createWallet,
     showMnemonic,
     restoreByMnemonic,
