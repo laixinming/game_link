@@ -1,223 +1,48 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>纯本地链游 - 自动登录版</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
-body{background:#0b0f1a;color:#fff;padding:20px}
-.container{max-width:600px;margin:0 auto}
-.log{background:#121a29;padding:12px;border-radius:8px;margin:10px 0;min-height:120px;font-size:13px;white-space:pre-wrap}
-.btn{padding:8px 12px;margin:4px;border:none;border-radius:6px;background:#4a7dff;color:#fff;cursor:pointer}
-.btn-success{background:#00C851}
-.btn-warning{background:#ff8800}
-input{width:100%;padding:10px;margin:8px 0;border-radius:6px;border:none;background:#1e2530;color:#fff}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>多文件解耦·链游框架</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
+    body{background:#0b0f1a;color:#fff;padding:20px}
+    .container{max-width:600px;margin:0 auto}
+    .log{background:#121a29;padding:12px;border-radius:8px;margin:10px 0;min-height:160px;font-size:13px;white-space:pre-wrap}
+    .btn{padding:8px 12px;margin:4px;border:none;border-radius:6px;background:#4a7dff;color:#fff;cursor:pointer}
+    .btn-success{background:#00C851}
+    .btn-warning{background:#ff8800}
+    input{width:100%;padding:10px;margin:8px 0;border-radius:6px;border:none;background:#1e2530;color:#fff}
+  </style>
 </head>
 <body>
 <div class="container">
-  <h1>纯本地链游 · 数据不可篡改</h1>
-  <p>架构：本地哈希链 + 助记词 + 自动登录</p>
+  <h1>工程化解耦·游戏框架</h1>
+  <p>底层：core.js｜玩法：game.js｜页面：index.html</p>
 
-  <button class="btn" onclick="createWallet()">生成新钱包</button>
-  <button class="btn" onclick="showMnemonic()">查看助记词</button>
-  <button class="btn-success" onclick="mintItem()">生成新手剑</button>
-  <button class="btn" onclick="showItems()">查看我的道具</button>
-  <button class="btn btn-warning" onclick="verifyChainBtn()">校验链是否篡改</button>
+  <button class="btn" onclick="Core.createWallet()">生成钱包</button>
+  <button class="btn" onclick="Core.showMnemonic()">查看助记词</button>
+  <button class="btn-success" onclick="Game.givePlayerSword()">新手剑</button>
+  <button class="btn" onclick="Game.showMyBag()">背包</button>
+  <button class="btn btn-warning" onclick="Core.verifyChainBtn()">校验数据</button>
 
-  <input id="inputMnemonic" placeholder="请输入12个单词的助记词">
-  <button class="btn" onclick="restoreByMnemonic()">助记词恢复账号</button>
+  <input id="input_mne" placeholder="助记词恢复账号">
+  <button class="btn" onclick="Core.restoreByMnemonic()">恢复账号</button>
 
-  <button class="btn" onclick="exportArchive()">导出存档</button>
-  <button class="btn" onclick="importArchive()">导入存档</button>
+  <button class="btn" onclick="Core.exportArchive()">导出</button>
+  <button class="btn" onclick="Core.importArchive()">导入</button>
+
+  <!-- 扩展玩法按钮示例 -->
+  <button class="btn" onclick="Game.learnSkill('火球术', 50)">学习火球术</button>
+  <button class="btn" onclick="Game.enhanceItem(1, 3)">强化装备</button>
+  <button class="btn" onclick="Game.insertGem(1, '红宝石', '攻击+10')">镶嵌宝石</button>
 
   <h3>日志</h3>
   <div id="log" class="log">等待操作…</div>
 </div>
 
-<script>
-const logDom = document.getElementById('log');
-const KEY_MNEMONIC = 'game_mnemonic';
-const KEY_CHAIN = 'game_chain';
-
-const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(' ');
-
-function log(text) {
-  logDom.innerText = `[${new Date().toLocaleString()}] ${text}\n` + logDom.innerText;
-}
-
-// ====================== 自动登录（核心修改） ======================
-// 页面加载时：有钱包就自动登录，没有就提示创建
-function autoLogin() {
-  initChain();
-  const hasWallet = localStorage.getItem(KEY_MNEMONIC);
-  if (hasWallet) {
-    log('✅ 自动登录成功，已加载本地钱包');
-    showItems();
-  } else {
-    log('ℹ️ 未检测到钱包，请先生成钱包或助记词恢复');
-  }
-}
-
-// ====================== 钱包 ======================
-function createWallet() {
-  // 如果已经有钱包，防止重复创建
-  if (localStorage.getItem(KEY_MNEMONIC)) {
-    log('⚠️ 本地已有钱包，无需重复生成');
-    return;
-  }
-  const mnemonic = Array(12).fill(0).map(() => words[Math.random()*words.length|0]).join(' ');
-  localStorage.setItem(KEY_MNEMONIC, mnemonic);
-  log('✅ 新钱包已生成');
-}
-
-function showMnemonic() {
-  const mne = localStorage.getItem(KEY_MNEMONIC);
-  mne ? log('📄 助记词：' + mne) : log('⚠️ 未创建钱包');
-}
-
-// ====================== 助记词恢复账号 ======================
-function restoreByMnemonic() {
-  const input = document.getElementById('inputMnemonic').value.trim();
-  const wordArr = input.split(/\s+/).filter(w => w);
-  if (wordArr.length !== 12) {
-    log('❌ 助记词必须是 12 个单词');
-    return;
-  }
-  localStorage.setItem(KEY_MNEMONIC, input);
-  log('✅ 助记词恢复账号成功');
-  showItems();
-}
-
-// ====================== SHA256 哈希 ======================
-async function sha256(s) {
-  const enc = new TextEncoder();
-  const d = await crypto.subtle.digest('SHA-256', enc.encode(s));
-  return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
-// ====================== 本地不可篡改哈希链 ======================
-function initChain() {
-  if (!localStorage.getItem(KEY_CHAIN)) {
-    localStorage.setItem(KEY_CHAIN, '[]');
-  }
-}
-
-function getChain() {
-  return JSON.parse(localStorage.getItem(KEY_CHAIN) || '[]');
-}
-
-function saveChain(chain) {
-  localStorage.setItem(KEY_CHAIN, JSON.stringify(chain));
-}
-
-async function addRecord(data) {
-  const chain = getChain();
-  const prevHash = chain.length ? chain[chain.length-1].hash : 'genesis';
-  const block = {
-    index: chain.length,
-    time: Date.now(),
-    prevHash,
-    data,
-    hash: ''
-  };
-  block.hash = await sha256(JSON.stringify(block));
-  chain.push(block);
-  saveChain(chain);
-  return block;
-}
-
-// 校验整条链是否被篡改
-async function verifyChain() {
-  const chain = getChain();
-  for (let i = 1; i < chain.length; i++) {
-    const cur = chain[i];
-    const pre = chain[i-1];
-    const tempBlock = { ...cur, hash: '' };
-    const reHash = await sha256(JSON.stringify(tempBlock));
-    if (cur.hash !== reHash || cur.prevHash !== pre.hash) {
-      return false;
-    }
-  }
-  return true;
-}
-
-async function verifyChainBtn() {
-  const ok = await verifyChain();
-  if (ok) {
-    log('✅ 校验通过：数据未被篡改，链有效');
-  } else {
-    log('❌ 校验失败：数据已被篡改！');
-  }
-}
-
-// ====================== 道具系统 ======================
-async function mintItem() {
-  const mne = localStorage.getItem(KEY_MNEMONIC);
-  if (!mne) return log('⚠️ 先创建钱包');
-  const block = await addRecord({
-    type: 'item',
-    owner: mne,
-    name: '新手剑',
-    id: Date.now()
-  });
-  log(`✅ 获得【新手剑】 区块#${block.index}`);
-}
-
-function showItems() {
-  const mne = localStorage.getItem(KEY_MNEMONIC);
-  if (!mne) return log('⚠️ 未创建钱包');
-  const items = getChain().filter(b => b.data.type === 'item' && b.data.owner === mne);
-  log(`🎒 道具数量：${items.length}`);
-}
-
-// ====================== 导出/导入存档 ======================
-function exportArchive() {
-  const data = {
-    mnemonic: localStorage.getItem(KEY_MNEMONIC),
-    chain: getChain()
-  };
-  const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'game-archive.json';
-  a.click();
-  URL.revokeObjectURL(url);
-  log('📤 存档已导出');
-}
-
-function importArchive() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json';
-  input.onchange = e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const fr = new FileReader();
-    fr.onload = ev => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        if (data.mnemonic && data.chain) {
-          localStorage.setItem(KEY_MNEMONIC, data.mnemonic);
-          saveChain(data.chain);
-          log('📥 导入成功！');
-          showItems();
-        } else {
-          log('❌ 存档格式错误');
-        }
-      } catch (e) {
-        log('❌ 导入失败');
-      }
-    };
-    fr.readAsText(file);
-  };
-  input.click();
-}
-
-// 页面加载执行自动登录
-window.onload = autoLogin;
-</script>
+<!-- 先引底层，再引游戏 -->
+<script src="core.js"></script>
+<script src="game.js"></script>
 </body>
 </html>
