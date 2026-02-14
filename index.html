@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的链游 - 道具系统</title>
+    <title>我的链游 - 跨设备资产恢复</title>
     <style>
         * {
             box-sizing: border-box;
@@ -38,26 +38,33 @@
             color:#fff;
             cursor:pointer;
         }
-        .btn-danger {
-            background: #ff4444;
-        }
         .btn-success {
             background: #00C851;
+        }
+        input {
+            width:100%;
+            padding:10px;
+            margin:8px 0;
+            border-radius:6px;
+            border:none;
+            background:#1e2530;
+            color:#fff;
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>链游 - 道具归属系统</h1>
-    <p>状态：第四步·资产上链</p>
+    <h1>链游 - 跨设备资产恢复</h1>
+    <p>状态：第五步·账号&资产同步</p>
 
-    <div>
-        <button class="btn" onclick="createWallet()">生成钱包</button>
-        <button class="btn" onclick="showMyMnemonic()">查看助记词</button>
-        <button class="btn-success" onclick="mintItem()">生成道具【新手剑】</button>
-        <button class="btn" onclick="showMyItems()">查看我的道具</button>
-        <button class="btn" onclick="verifyChain()">校验链是否篡改</button>
-    </div>
+    <button class="btn" onclick="createWallet()">生成新钱包</button>
+    <button class="btn" onclick="showMyMnemonic()">查看助记词</button>
+    <button class="btn-success" onclick="mintItem()">生成道具【新手剑】</button>
+    <button class="btn" onclick="showMyItems()">查看我的道具</button>
+    <button class="btn" onclick="verifyChain()">校验资产安全</button>
+
+    <input id="inputMnemonic" placeholder="粘贴助记词，跨设备恢复账号+资产">
+    <button class="btn" onclick="restoreWalletAndAssets()">恢复账号&资产</button>
 
     <h3>调试日志</h3>
     <div id="log" class="log">等待操作...</div>
@@ -68,15 +75,13 @@ const logDom = document.getElementById('log');
 const STORAGE_MNEMONIC = 'game_mnemonic';
 const STORAGE_CHAIN = 'game_chain';
 
-// 助记词词库
 const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(" ");
 
-// 日志输出
 function log(text) {
     logDom.innerText = `[${new Date().toLocaleString()}] ${text}\n` + logDom.innerText;
 }
 
-// ====================== 钱包功能 ======================
+// ====================== 钱包 ======================
 function generateMnemonic() {
     let res = [];
     for(let i=0; i<12; i++) {
@@ -89,7 +94,7 @@ function createWallet() {
     try {
         const mnemonic = generateMnemonic();
         localStorage.setItem(STORAGE_MNEMONIC, mnemonic);
-        log("✅ 钱包已生成");
+        log("✅ 新钱包已生成");
     } catch (e) { log("❌ 生成失败："+e.message); }
 }
 function showMyMnemonic() {
@@ -97,110 +102,69 @@ function showMyMnemonic() {
     mne ? log("📄 助记词："+mne) : log("⚠️ 未创建钱包");
 }
 
-// ====================== 原生SHA-256哈希 ======================
+// ====================== SHA256 ======================
 async function sha256(str) {
     const encoder = new TextEncoder();
     const data = encoder.encode(str);
     const hash = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hash))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
+    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-// ====================== 哈希链核心 ======================
+// ====================== 哈希链 ======================
 function initChain() {
-    if(!localStorage.getItem(STORAGE_CHAIN)) {
-        localStorage.setItem(STORAGE_CHAIN, JSON.stringify([]));
-    }
+    if(!localStorage.getItem(STORAGE_CHAIN)) localStorage.setItem(STORAGE_CHAIN, JSON.stringify([]));
 }
-function getChain() {
-    return JSON.parse(localStorage.getItem(STORAGE_CHAIN) || '[]');
-}
-function saveChain(chain) {
-    localStorage.setItem(STORAGE_CHAIN, JSON.stringify(chain));
-}
+function getChain() { return JSON.parse(localStorage.getItem(STORAGE_CHAIN)||'[]'); }
+function saveChain(chain) { localStorage.setItem(STORAGE_CHAIN, JSON.stringify(chain)); }
+
 async function addRecord(data) {
     const chain = getChain();
-    const prevHash = chain.length > 0 ? chain[chain.length-1].hash : 'genesis';
-
-    const block = {
-        index: chain.length,
-        time: Date.now(),
-        prevHash: prevHash,
-        data: data,
-        hash: ''
-    };
-
+    const prevHash = chain.length?chain[chain.length-1].hash:'genesis';
+    const block = {index:chain.length, time:Date.now(), prevHash, data, hash:''};
     block.hash = await sha256(JSON.stringify(block));
     chain.push(block);
     saveChain(chain);
     return block;
 }
+
 async function verifyChain() {
     const chain = getChain();
-    if(chain.length === 0) return true;
-
-    for(let i=1; i<chain.length; i++) {
-        const cur = chain[i];
-        const prev = chain[i-1];
-        const temp = {...cur, hash: ''};
-        const reHash = await sha256(JSON.stringify(temp));
-
-        if(cur.hash !== reHash || cur.prevHash !== prev.hash) {
-            log(`❌ 第${i}块被篡改！`);
-            return false;
-        }
+    for(let i=1;i<chain.length;i++){
+        const c=chain[i],p=chain[i-1];
+        const h=await sha256(JSON.stringify({...c,hash:''}));
+        if(c.hash!==h||c.prevHash!==p.hash){log(`❌ 第${i}块被篡改`);return false;}
     }
     log("✅ 哈希链完整，资产安全");
     return true;
 }
 
-// ====================== 道具系统（核心） ======================
-// 生成道具，归属当前钱包
+// ====================== 道具系统 ======================
 async function mintItem() {
-    const mnemonic = localStorage.getItem(STORAGE_MNEMONIC);
-    if(!mnemonic) {
-        log("⚠️ 请先生成钱包");
-        return;
-    }
-
-    const block = await addRecord({
-        type: "item",
-        owner: mnemonic, // 绑定所有者
-        itemName: "新手剑",
-        itemId: "item_"+Date.now() // 唯一道具ID
-    });
-
-    log(`✅ 获得【新手剑】，记录 #${block.index}`);
+    const mne = localStorage.getItem(STORAGE_MNEMONIC);
+    if(!mne) return log("⚠️ 请先生成钱包");
+    const b = await addRecord({type:"item",owner:mne,itemName:"新手剑",itemId:"item_"+Date.now()});
+    log(`✅ 获得【新手剑】 记录#${b.index}`);
 }
 
-// 查看当前钱包的所有道具
 function showMyItems() {
-    const mnemonic = localStorage.getItem(STORAGE_MNEMONIC);
-    if(!mnemonic) {
-        log("⚠️ 请先生成钱包");
-        return;
-    }
-
-    const chain = getChain();
-    const myItems = chain.filter(b => b.data.type === "item" && b.data.owner === mnemonic);
-
-    if(myItems.length === 0) {
-        log("🎒 背包为空，快去生成道具");
-        return;
-    }
-
-    log(`🎒 共拥有 ${myItems.length} 个道具：`);
-    myItems.forEach(item => {
-        log(`- ${item.data.itemName} (ID:${item.data.itemId.slice(-6)})`);
-    });
+    const mne = localStorage.getItem(STORAGE_MNEMONIC);
+    if(!mne) return log("⚠️ 请先生成钱包");
+    const items = getChain().filter(b=>b.data.type==="item"&&b.data.owner===mne);
+    items.length?log(`🎒 共有${items.length}件道具`)+items.forEach(i=>log(`- ${i.data.itemName}`)):log("🎒 背包空");
 }
 
-// 初始化
-window.onload = () => {
-    initChain();
-    log("游戏基座+道具系统加载完成 ✅");
-};
+// ====================== 跨设备恢复（本步核心） ======================
+function restoreWalletAndAssets() {
+    const val = document.getElementById('inputMnemonic').value.trim();
+    if(!val || val.split(/\s+/).length!==12) return log("❌ 请输入12个单词助记词");
+    localStorage.setItem(STORAGE_MNEMONIC, val);
+    log("✅ 账号恢复成功！");
+    log("🔍 正在读取链上属于你的资产...");
+    showMyItems();
+}
+
+// ====================== 初始化 ======================
+window.onload = () => { initChain(); log("游戏加载完成 ✅"); };
 </script>
 </body>
 </html>
