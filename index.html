@@ -1,150 +1,210 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的链游 - IPFS 公共链</title>
-    <style>
-        * {box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
-        body {background:#0b0f1a;color:#fff;padding:20px}
-        .container {max-width:600px;margin:0 auto}
-        .log {background:#121a29;padding:12px;border-radius:8px;margin:10px 0;min-height:120px;font-size:13px;white-space:pre-wrap}
-        .btn {padding:8px 12px;margin:4px;border:none;border-radius:6px;background:#4a7dff;color:#fff;cursor:pointer}
-        .btn-success {background:#00C851}
-        .btn-warning {background:#ff8800}
-        input {width:100%;padding:10px;margin:8px 0;border-radius:6px;border:none;background:#1e2530;color:#fff}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>零服务器私链·道具交易版</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
+body{background:#0a0f1e;color:#e6e9f0;padding:15px}
+.game{max-width:420px;margin:0 auto;background:#121a2f;border-radius:16px;overflow:hidden}
+.head{background:#1b2542;padding:12px;text-align:center;font-weight:bold}
+.panel{padding:15px}
+.btn{width:100%;padding:12px;margin:6px 0;border:none;border-radius:10px;background:#2d4bff;color:#fff;font-weight:bold;cursor:pointer}
+.btn-success{background:#00b850}
+.btn-warning{background:#ff9500}
+.btn-danger{background:#ff4444}
+input{width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;background:#1e273e;color:#fff}
+.log{background:#0d1324;padding:12px;border-radius:8px;margin:10px 0;height:110px;overflow-y:auto;font-size:13px}
+.bag{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.item{background:#1b2542;padding:10px;border-radius:8px;text-align:center;font-size:12px}
+.hr{height:1px;background:#1e273e;margin:10px 0}
+</style>
 </head>
 <body>
-<div class="container">
-    <h1>链游 - IPFS 公共链</h1>
-    <p>状态：第六步·全网资产同步</p>
+<div class="game">
+  <div class="head">零服务器私链·道具交易</div>
+  <div class="panel">
+    <button class="btn" onclick="createWallet()">🪙 创建钱包</button>
+    <button class="btn" onclick="refreshChain()">🔄 刷新全服链</button>
+    <div class="hr"></div>
+    <button class="btn-success" onclick="fight()">⚔️ 打怪爆装备</button>
+    <div class="hr"></div>
 
-    <button class="btn" onclick="createWallet()">生成钱包</button>
-    <button class="btn" onclick="showMyMnemonic()">查看助记词</button>
-    <button class="btn-success" onclick="mintItem()">生成新手剑</button>
-    <button class="btn" onclick="showMyItems()">查看我的道具</button>
+    <input id="toAddr" placeholder="对方钱包地址">
+    <input id="sendItemName" placeholder="要发送的道具名">
+    <button class="btn-warning" onclick="sendItem()">📤 发送道具给对方</button>
     
-    <button class="btn btn-warning" onclick="uploadChainToIPFS()">上传链到 IPFS</button>
-    
-    <input id="inputCID" placeholder="输入IPFS CID 拉取全链">
-    <button class="btn" onclick="pullChainFromIPFS()">拉取 IPFS 链</button>
-
-    <input id="inputMnemonic" placeholder="粘贴助记词恢复账号">
-    <button class="btn" onclick="restoreWalletAndAssets()">恢复账号&资产</button>
-
-    <h3>调试日志</h3>
-    <div id="log" class="log">等待操作...</div>
+    <div class="hr"></div>
+    <div>背包</div>
+    <div class="bag" id="bag"></div>
+    <div>日志</div>
+    <div class="log" id="log"></div>
+  </div>
 </div>
 
 <script>
-const logDom = document.getElementById('log');
-const STORAGE_MNEMONIC = 'game_mnemonic';
-const STORAGE_CHAIN = 'game_chain';
-const words = "apple banana cherry date elder fig grape honey ice juice kite lemon mango nut orange pear queen rose sun tomato umbrella van water xmas yellow zebra".split(" ");
+const logBox = document.getElementById('log')
+const bagBox = document.getElementById('bag')
+const USER_ADDR = 'my_addr'
 
-function log(text) {
-    logDom.innerText = `[${new Date().toLocaleString()}] ${text}\n` + logDom.innerText;
+// 你部署后改成自己 Vercel 的 chain.json 地址
+const CHAIN_URL = 'https://your-domain.vercel.app/chain.json?t=' + Date.now()
+
+function print(text) {
+  logBox.innerText = `[${new Date().toLocaleTimeString()}] ${text}\n` + logBox.innerText
 }
 
-// ====================== 钱包 ======================
+// 钱包
 function createWallet() {
-    const mnemonic = Array(12).fill(0).map(()=>words[Math.random()*words.length|0]).join(" ");
-    localStorage.setItem(STORAGE_MNEMONIC, mnemonic);
-    log("✅ 钱包已生成");
-}
-function showMyMnemonic() {
-    const mne = localStorage.getItem(STORAGE_MNEMONIC);
-    mne ? log("📄 助记词："+mne) : log("⚠️ 未创建钱包");
+  const addr = Array(16).fill(0)
+    .map(() => Math.random().toString(36)[2]).join('')
+  localStorage.setItem(USER_ADDR, addr)
+  print('✅ 你的地址：' + addr)
+  refreshChain()
 }
 
-// ====================== SHA256 哈希 ======================
-async function sha256(s) {
-    const enc = new TextEncoder();
-    const d = await crypto.subtle.digest('SHA-256', enc.encode(s));
-    return Array.from(new Uint8Array(d)).map(b=>b.toString(16).padStart(2,'0')).join('');
+function getMyAddr() {
+  return localStorage.getItem(USER_ADDR)
 }
 
-// ====================== 本地哈希链 ======================
-function initChain() { if(!localStorage.getItem(STORAGE_CHAIN)) localStorage.setItem(STORAGE_CHAIN,'[]') }
-function getChain() { return JSON.parse(localStorage.getItem(STORAGE_CHAIN)||'[]') }
-function saveChain(c) { localStorage.setItem(STORAGE_CHAIN, JSON.stringify(c)) }
-
-async function addRecord(data) {
-    const chain = getChain();
-    const prev = chain.length ? chain[chain.length-1].hash : 'genesis';
-    const block = {index:chain.length, time:Date.now(), prevHash:prev, data, hash:''};
-    block.hash = await sha256(JSON.stringify(block));
-    chain.push(block);
-    saveChain(chain);
-    return block;
+// SHA256 防篡改
+async function sha256(str) {
+  const msg = new TextEncoder().encode(str)
+  const hash = await crypto.subtle.digest('SHA-256', msg)
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-// ====================== 道具系统 ======================
-async function mintItem() {
-    const mne = localStorage.getItem(STORAGE_MNEMONIC);
-    if(!mne) return log("⚠️ 先创建钱包");
-    const b = await addRecord({type:"item", owner:mne, itemName:"新手剑", id:Date.now()});
-    log(`✅ 获得【新手剑】 记录#${b.index}`);
-}
-
-function showMyItems() {
-    const mne = localStorage.getItem(STORAGE_MNEMONIC);
-    if(!mne) return log("⚠️ 先创建钱包");
-    const items = getChain().filter(i=>i.data.type==="item" && i.data.owner===mne);
-    items.length ? log(`🎒 共拥有 ${items.length} 个道具`) : log("🎒 背包空");
-}
-
-// ====================== 账号恢复 ======================
-function restoreWalletAndAssets() {
-    const val = document.getElementById('inputMnemonic').value.trim();
-    if(val.split(/\s+/).length!==12) return log("❌ 请输入12个单词助记词");
-    localStorage.setItem(STORAGE_MNEMONIC, val);
-    log("✅ 账号恢复成功");
-    showMyItems();
-}
-
-// ====================== IPFS 上传/拉取（核心） ======================
-// 上传链到 IPFS
-async function uploadChainToIPFS() {
-    const chain = getChain();
-    if(chain.length === 0) return log("⚠️ 链为空");
-
-    try {
-        const formData = new FormData();
-        formData.append('file', new Blob([JSON.stringify(chain)], {type:'application/json'}));
-
-        const res = await fetch('https://ipfs.io/api/v0/add?pin=true', {
-            method: 'POST',
-            body: formData
-        });
-        const json = await res.json();
-        const cid = json.Hash;
-        log("📡 上传成功！IPFS CID："+cid);
-        document.getElementById('inputCID').value = cid;
-    } catch(e) {
-        log("❌ 上传失败：网络或IPFS限制");
+// 校验整条链是否被篡改
+async function verifyChain(chain) {
+  if (!chain || chain.length === 0) return true
+  for (let i = 1; i < chain.length; i++) {
+    const cur = chain[i]
+    const pre = chain[i - 1]
+    const temp = { ...cur, hash: '' }
+    const calcHash = await sha256(JSON.stringify(temp))
+    if (cur.hash !== calcHash || cur.prevHash !== pre.hash) {
+      return false
     }
+  }
+  return true
 }
 
-// 从 IPFS 拉取全链
-async function pullChainFromIPFS() {
-    const cid = document.getElementById('inputCID').value.trim();
-    if(!cid) return log("⚠️ 请输入CID");
-
-    try {
-        const res = await fetch(`https://ipfs.io/ipfs/${cid}`);
-        const chain = await res.json();
-        saveChain(chain);
-        log("📥 拉取成功！已同步全链数据");
-        showMyItems();
-    } catch(e) {
-        log("❌ 拉取失败：CID无效或网络异常");
+// 拉取全服唯一私链
+async function refreshChain() {
+  try {
+    const res = await fetch(CHAIN_URL)
+    const chain = await res.json()
+    const ok = await verifyChain(chain)
+    if (!ok) {
+      print('❌ 链被篡改！全服拒绝数据')
+      return null
     }
+    window.GLOBAL_CHAIN = chain
+    print('✅ 全服链同步完成')
+    showBag()
+    return chain
+  } catch (e) {
+    print('⚠️ 使用本地演示链')
+    if (!window.GLOBAL_CHAIN) {
+      const genesis = {
+        index: 0, time: Date.now(), prevHash: '0',
+        data: { type: 'genesis' }, hash: await sha256('genesis')
+      }
+      window.GLOBAL_CHAIN = [genesis]
+    }
+    return window.GLOBAL_CHAIN
+  }
 }
 
-// ====================== 初始化 ======================
-window.onload = initChain;
+// 新增区块（唯一合法上链方式）
+async function addBlock(data) {
+  const chain = await refreshChain()
+  if (!chain) return null
+  const valid = await verifyChain(chain)
+  if (!valid) {
+    print('❌ 作弊：链已被篡改')
+    return null
+  }
+  const last = chain[chain.length - 1]
+  const block = {
+    index: chain.length,
+    time: Date.now(),
+    prevHash: last.hash,
+    data,
+    hash: ''
+  }
+  block.hash = await sha256(JSON.stringify({ ...block, hash: '' }))
+  chain.push(block)
+  window.GLOBAL_CHAIN = chain
+  return block
+}
+
+// 打怪
+async function fight() {
+  const me = getMyAddr()
+  if (!me) return print('⚠️ 先创建钱包')
+  const items = ['铁剑', '布衣', '戒指', '靴子', '药水']
+  const item = items[Math.random() * 5 | 0]
+  await addBlock({ type: 'item', owner: me, name: item })
+  print(`🎁 获得：${item}`)
+}
+
+// 显示背包（只认链，不认本地）
+function showBag() {
+  const me = getMyAddr()
+  if (!me || !window.GLOBAL_CHAIN) return
+  const items = window.GLOBAL_CHAIN.filter(b =>
+    b.data.type === 'item' && b.data.owner === me
+  )
+  bagBox.innerHTML = ''
+  items.forEach(it => {
+    const d = document.createElement('div')
+    d.className = 'item'
+    d.innerText = it.data.name
+    bagBox.appendChild(d)
+  })
+}
+
+// ====================== 核心：道具交易（发送） ======================
+async function sendItem() {
+  const me = getMyAddr()
+  const to = document.getElementById('toAddr').value.trim()
+  const name = document.getElementById('sendItemName').value.trim()
+  if (!me || !to || !name) return print('⚠️ 信息不全')
+  if (me === to) return print('⚠️ 不能发给自己')
+
+  // 防作弊：检查是否真的拥有该道具
+  const chain = window.GLOBAL_CHAIN
+  const has = chain.some(b =>
+    b.data.type === 'item' &&
+    b.data.owner === me &&
+    b.data.name === name
+  )
+  if (!has) return print('❌ 你没有这个道具，无法发送')
+
+  // 1. 销毁原道具
+  await addBlock({
+    type: 'trade_remove',
+    from: me,
+    item: name
+  })
+  // 2. 给对方新增道具
+  await addBlock({
+    type: 'trade_add',
+    to: to,
+    item: name
+  })
+
+  print(`✅ 成功发送【${name}】给对方`)
+  refreshChain()
+}
+
+// 初始化
+window.onload = () => {
+  if (getMyAddr()) refreshChain()
+}
 </script>
 </body>
 </html>
